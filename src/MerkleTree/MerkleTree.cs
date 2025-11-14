@@ -136,8 +136,7 @@ public class MerkleTree
     {
         // Compute padding hash as Hash("MERKLE_PADDING" || unpaired_node_hash)
         var domainSeparatorBytes = System.Text.Encoding.UTF8.GetBytes(PaddingDomainSeparator);
-        var combinedData = domainSeparatorBytes.Concat(unpairedNode.Hash!).ToArray();
-        var paddingHash = ComputeHash(combinedData);
+        var paddingHash = ComputeParentHash(domainSeparatorBytes, unpairedNode.Hash!);
         
         return new MerkleTreeNode(paddingHash);
     }
