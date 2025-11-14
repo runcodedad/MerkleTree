@@ -1,0 +1,40 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Multi-targeting for broad compatibility -->
+    <TargetFrameworks>net10.0;netstandard2.1</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+
+    <!-- NuGet Package Metadata -->
+    <PackageId>MerkleTree</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>runcodedad</Authors>
+    <Company>runcodedad</Company>
+    <Description>A high-performance .NET library for creating and managing Merkle trees, providing cryptographic data structure support for data integrity verification and efficient data validation.</Description>
+    <PackageTags>merkle;merkle-tree;cryptography;hash;data-structure;blockchain;security;integrity;verification</PackageTags>
+    <PackageProjectUrl>https://github.com/runcodedad/merkletree</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/runcodedad/merkletree</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <Copyright>Copyright (c) 2025 runcodedad</Copyright>
+
+    <!-- Documentation and Build Configuration -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    
+    <!-- Strong Naming -->
+    <SignAssembly>false</SignAssembly>
+    <DelaySign>false</DelaySign>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>
