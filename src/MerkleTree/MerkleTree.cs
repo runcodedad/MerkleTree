@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-
 namespace MerkleTree;
 
 /// <summary>
@@ -46,15 +44,6 @@ public class MerkleTree
     public MerkleTreeNode Root { get; }
     
     /// <summary>
-    /// Gets the hash algorithm used for computing node hashes (legacy property).
-    /// </summary>
-    /// <remarks>
-    /// This property is maintained for backward compatibility. New code should use <see cref="HashFunction"/> instead.
-    /// </remarks>
-    [Obsolete("Use HashFunction property instead for access to the pluggable hash function abstraction.")]
-    public HashAlgorithmName HashAlgorithm { get; }
-    
-    /// <summary>
     /// Gets the hash function used for computing node hashes.
     /// </summary>
     public IHashFunction HashFunction => _hashFunction;
@@ -89,42 +78,9 @@ public class MerkleTree
             throw new ArgumentException("Leaf data must contain at least one element.", nameof(leafData));
         
         _hashFunction = hashFunction;
-#pragma warning disable CS0618 // Type or member is obsolete
-        HashAlgorithm = HashAlgorithmName.SHA256; // For backward compatibility
-#pragma warning restore CS0618
         Root = BuildTree(leafList);
     }
-    
-    /// <summary>
-    /// Initializes a new instance of the <see cref="MerkleTree"/> class with the specified leaf data and hash algorithm (legacy constructor).
-    /// </summary>
-    /// <param name="leafData">The data for each leaf node. Must contain at least one element.</param>
-    /// <param name="hashAlgorithm">The hash algorithm to use. Defaults to SHA256.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="leafData"/> is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="leafData"/> is empty.</exception>
-    /// <remarks>
-    /// This constructor is maintained for backward compatibility. New code should use the constructor
-    /// accepting <see cref="IHashFunction"/> instead.
-    /// </remarks>
-    public MerkleTree(IEnumerable<byte[]> leafData, HashAlgorithmName? hashAlgorithm)
-        : this(leafData, CreateHashFunctionFromAlgorithmName(hashAlgorithm ?? HashAlgorithmName.SHA256))
-    {
-#pragma warning disable CS0618 // Type or member is obsolete
-        HashAlgorithm = hashAlgorithm ?? HashAlgorithmName.SHA256;
-#pragma warning restore CS0618
-    }
-    
-    /// <summary>
-    /// Creates an IHashFunction from a HashAlgorithmName for backward compatibility.
-    /// </summary>
-    private static IHashFunction CreateHashFunctionFromAlgorithmName(HashAlgorithmName algorithmName)
-    {
-        if (algorithmName == HashAlgorithmName.SHA256)
-            return new Sha256HashFunction();
-        
-        // For other algorithms, create a legacy adapter
-        return new LegacyHashAlgorithmAdapter(algorithmName);
-    }
+
     
     /// <summary>
     /// Builds the Merkle tree from the provided leaf data.

@@ -224,8 +224,8 @@ public class MerkleTreeTests
         var leafData = CreateLeafData("leaf1", "leaf2");
         
         // Act
-        var treeSHA256 = new MerkleTree(leafData, HashAlgorithmName.SHA256);
-        var treeSHA512 = new MerkleTree(leafData, HashAlgorithmName.SHA512);
+        var treeSHA256 = new MerkleTree(leafData, new Sha256HashFunction());
+        var treeSHA512 = new MerkleTree(leafData, new Sha512HashFunction());
         
         // Assert
         Assert.Equal("SHA-256", treeSHA256.HashFunction.Name);
