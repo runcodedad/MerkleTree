@@ -5,14 +5,22 @@ namespace MerkleTree;
 /// </summary>
 /// <remarks>
 /// This class provides information about the tree structure including its height,
-/// the number of leaves, and the root hash.
+/// the number of leaves, and the root node.
 /// </remarks>
 public class MerkleTreeMetadata
 {
     /// <summary>
+    /// Gets the root node of the Merkle tree.
+    /// </summary>
+    public MerkleTreeNode Root { get; }
+    
+    /// <summary>
     /// Gets the root hash of the Merkle tree.
     /// </summary>
-    public byte[] RootHash { get; }
+    /// <remarks>
+    /// This is a convenience property that returns the hash from the Root node.
+    /// </remarks>
+    public byte[] RootHash => Root.Hash ?? Array.Empty<byte>();
     
     /// <summary>
     /// Gets the height of the Merkle tree.
@@ -31,12 +39,12 @@ public class MerkleTreeMetadata
     /// <summary>
     /// Initializes a new instance of the <see cref="MerkleTreeMetadata"/> class.
     /// </summary>
-    /// <param name="rootHash">The root hash of the tree.</param>
+    /// <param name="root">The root node of the tree.</param>
     /// <param name="height">The height of the tree.</param>
     /// <param name="leafCount">The number of leaves in the tree.</param>
-    public MerkleTreeMetadata(byte[] rootHash, int height, long leafCount)
+    public MerkleTreeMetadata(MerkleTreeNode root, int height, long leafCount)
     {
-        RootHash = rootHash ?? throw new ArgumentNullException(nameof(rootHash));
+        Root = root ?? throw new ArgumentNullException(nameof(root));
         Height = height;
         LeafCount = leafCount;
     }

@@ -499,14 +499,16 @@ public class MerkleTreeStreamTests
     {
         // Arrange
         var rootHash = new byte[] { 1, 2, 3, 4 };
+        var rootNode = new MerkleTreeNode(rootHash);
         var height = 5;
         var leafCount = 32L;
         
         // Act
-        var metadata = new MerkleTreeMetadata(rootHash, height, leafCount);
+        var metadata = new MerkleTreeMetadata(rootNode, height, leafCount);
         
         // Assert
-        Assert.Same(rootHash, metadata.RootHash);
+        Assert.Same(rootNode, metadata.Root);
+        Assert.Equal(rootHash, metadata.RootHash);
         Assert.Equal(height, metadata.Height);
         Assert.Equal(leafCount, metadata.LeafCount);
     }

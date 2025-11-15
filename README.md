@@ -62,6 +62,11 @@ var tree = new MerkleTree(leafData);
 byte[] rootHash = tree.GetRootHash();
 Console.WriteLine($"Root Hash: {Convert.ToHexString(rootHash)}");
 
+// Or get full metadata
+var metadata = tree.GetMetadata();
+Console.WriteLine($"Root Hash: {Convert.ToHexString(metadata.RootHash)}");
+Console.WriteLine($"Height: {metadata.Height}, Leaves: {metadata.LeafCount}");
+
 // Use a different hash algorithm (default is SHA256)
 var treeSHA512 = new MerkleTree(leafData, new Sha512HashFunction());
 ```
@@ -189,9 +194,12 @@ Console.WriteLine($"Tree Height: {metadata.Height}");
 
 The `MerkleTreeMetadata` class provides information about the constructed tree:
 
-- **RootHash**: The Merkle root hash
+- **Root**: The root node of the tree (`MerkleTreeNode`)
+- **RootHash**: The Merkle root hash (convenience property from `Root.Hash`)
 - **Height**: The height of the tree (0 for single leaf, 1 for two leaves, etc.)
 - **LeafCount**: The total number of leaves processed
+
+Both `MerkleTree.GetMetadata()` and `MerkleTreeStream.Build()` return `MerkleTreeMetadata` for consistency.
 
 For more details and examples, see [docs/STREAMING.md](docs/STREAMING.md).
 

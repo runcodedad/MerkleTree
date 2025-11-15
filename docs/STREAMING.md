@@ -52,9 +52,12 @@ Assert.Equal(inMemoryTree.GetRootHash(), streamingMetadata.RootHash);
 
 The builder returns a `MerkleTreeMetadata` object containing:
 
-- **RootHash**: The Merkle root (byte array)
+- **Root**: The root node of the tree (`MerkleTreeNode`)
+- **RootHash**: The Merkle root hash (convenience property from `Root.Hash`)
 - **Height**: Tree height (0 for single leaf, 1 for two leaves, etc.)
 - **LeafCount**: Total number of leaves processed
+
+Both `MerkleTree.GetMetadata()` and `MerkleTreeStream` methods return the same `MerkleTreeMetadata` type for consistency.
 
 ## Architecture
 
@@ -210,12 +213,23 @@ public class MerkleTreeStream
 public class MerkleTreeMetadata
 {
     // Constructor
-    public MerkleTreeMetadata(byte[] rootHash, int height, long leafCount)
+    public MerkleTreeMetadata(MerkleTreeNode root, int height, long leafCount)
     
     // Properties
-    public byte[] RootHash { get; }
+    public MerkleTreeNode Root { get; }
+    public byte[] RootHash { get; } // Convenience property from Root.Hash
     public int Height { get; }
     public long LeafCount { get; }
+}
+```
+
+### MerkleTree
+
+```csharp
+public class MerkleTree
+{
+    // Get metadata from an in-memory tree
+    public MerkleTreeMetadata GetMetadata()
 }
 ```
 
@@ -223,9 +237,9 @@ public class MerkleTreeMetadata
 
 1. **Intermediate Levels in Memory**: While leaves are processed incrementally, each level's nodes are held in memory during construction. For extremely tall trees (millions of leaves), this is still manageable.
 
-2. **No Proof Generation**: This implementation focuses on root hash computation. Merkle proof generation would require additional storage or tree traversal.
+2. **No Full Tree Structure in Streaming**: `MerkleTreeStream` returns only the root node without child references (memory-efficient). For full tree structure with child nodes, use the in-memory `MerkleTree` class.
 
-3. **No Tree Persistence**: The tree structure is not persisted. Only the root hash and metadata are returned.
+3. **No Proof Generation**: Streaming focuses on root hash computation. For Merkle proofs, use the in-memory `MerkleTree` constructor which maintains the full tree structure.
 
 ## Future Enhancements
 

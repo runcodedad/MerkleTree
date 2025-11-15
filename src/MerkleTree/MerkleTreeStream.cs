@@ -72,8 +72,9 @@ public class MerkleTreeStream : MerkleTreeBase
         }
         
         var rootHash = currentLevel[0];
+        var rootNode = new MerkleTreeNode(rootHash);
         
-        return new MerkleTreeMetadata(rootHash, height, leafCount);
+        return new MerkleTreeMetadata(rootNode, height, leafCount);
     }
     
     /// <summary>
@@ -105,8 +106,9 @@ public class MerkleTreeStream : MerkleTreeBase
         }
         
         var rootHash = currentLevel[0];
+        var rootNode = new MerkleTreeNode(rootHash);
         
-        return new MerkleTreeMetadata(rootHash, height, leafCount);
+        return new MerkleTreeMetadata(rootNode, height, leafCount);
     }
     
     /// <summary>
@@ -142,8 +144,9 @@ public class MerkleTreeStream : MerkleTreeBase
         }
         
         var rootHash = currentLevel[0];
+        var rootNode = new MerkleTreeNode(rootHash);
         
-        return new MerkleTreeMetadata(rootHash, height, leafCount);
+        return new MerkleTreeMetadata(rootNode, height, leafCount);
     }
     
     /// <summary>

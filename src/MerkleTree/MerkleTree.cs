@@ -40,6 +40,16 @@ public class MerkleTree : MerkleTreeBase
     public MerkleTreeNode Root { get; }
     
     /// <summary>
+    /// Gets the height of the Merkle tree.
+    /// </summary>
+    private int Height { get; }
+    
+    /// <summary>
+    /// Gets the number of leaves in the Merkle tree.
+    /// </summary>
+    private long LeafCount { get; }
+    
+    /// <summary>
     /// Initializes a new instance of the <see cref="MerkleTree"/> class with the specified leaf data using SHA-256.
     /// </summary>
     /// <param name="leafData">The data for each leaf node. Must contain at least one element.</param>
@@ -67,7 +77,10 @@ public class MerkleTree : MerkleTreeBase
         if (leafList.Count == 0)
             throw new ArgumentException("Leaf data must contain at least one element.", nameof(leafData));
         
-        Root = BuildTree(leafList);
+        LeafCount = leafList.Count;
+        var (root, height) = BuildTree(leafList);
+        Root = root;
+        Height = height;
     }
 
     
@@ -75,19 +88,22 @@ public class MerkleTree : MerkleTreeBase
     /// Builds the Merkle tree from the provided leaf data.
     /// </summary>
     /// <param name="leafData">The data for each leaf node.</param>
-    /// <returns>The root node of the constructed tree.</returns>
-    private MerkleTreeNode BuildTree(List<byte[]> leafData)
+    /// <returns>A tuple containing the root node and the height of the tree.</returns>
+    private (MerkleTreeNode root, int height) BuildTree(List<byte[]> leafData)
     {
         // Create leaf nodes at Level 0
         var currentLevel = leafData.Select(data => new MerkleTreeNode(ComputeHash(data))).ToList();
+        
+        int height = 0;
         
         // Build tree bottom-up until we reach the root
         while (currentLevel.Count > 1)
         {
             currentLevel = BuildNextLevel(currentLevel);
+            height++;
         }
         
-        return currentLevel[0];
+        return (currentLevel[0], height);
     }
     
     /// <summary>
@@ -149,5 +165,14 @@ public class MerkleTree : MerkleTreeBase
     public byte[] GetRootHash()
     {
         return Root.Hash ?? Array.Empty<byte>();
+    }
+    
+    /// <summary>
+    /// Gets the metadata for this Merkle tree.
+    /// </summary>
+    /// <returns>Metadata containing the root node, height, and leaf count.</returns>
+    public MerkleTreeMetadata GetMetadata()
+    {
+        return new MerkleTreeMetadata(Root, Height, LeafCount);
     }
 }
