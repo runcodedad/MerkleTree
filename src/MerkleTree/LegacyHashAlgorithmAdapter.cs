@@ -23,7 +23,23 @@ internal class LegacyHashAlgorithmAdapter : IHashFunction
     }
     
     /// <inheritdoc/>
-    public string Name => _algorithmName.Name ?? "Unknown";
+    public string Name
+    {
+        get
+        {
+            var name = _algorithmName.Name;
+            if (name == null)
+                return "Unknown";
+            
+            // Format names consistently with standard naming (e.g., "SHA-256" instead of "SHA256")
+            if (name.StartsWith("SHA") && name.Length > 3 && char.IsDigit(name[3]))
+            {
+                return $"SHA-{name.Substring(3)}";
+            }
+            
+            return name;
+        }
+    }
     
     /// <inheritdoc/>
     public int HashSizeInBytes

@@ -228,8 +228,8 @@ public class MerkleTreeTests
         var treeSHA512 = new MerkleTree(leafData, HashAlgorithmName.SHA512);
         
         // Assert
-        Assert.Equal(HashAlgorithmName.SHA256, treeSHA256.HashAlgorithm);
-        Assert.Equal(HashAlgorithmName.SHA512, treeSHA512.HashAlgorithm);
+        Assert.Equal("SHA-256", treeSHA256.HashFunction.Name);
+        Assert.Equal("SHA-512", treeSHA512.HashFunction.Name);
         Assert.NotEqual(treeSHA256.GetRootHash().Length, treeSHA512.GetRootHash().Length);
     }
     
