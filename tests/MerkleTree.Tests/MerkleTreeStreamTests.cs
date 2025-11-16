@@ -1,5 +1,6 @@
 using System.Text;
 using Xunit;
+using InMemoryMerkleTree = MerkleTree.MerkleTree;
 
 namespace MerkleTree.Tests;
 
@@ -512,4 +513,267 @@ public class MerkleTreeStreamTests
         Assert.Equal(height, metadata.Height);
         Assert.Equal(leafCount, metadata.LeafCount);
     }
+
+    #region Proof Generation Tests
+
+    [Fact]
+    public void GenerateProof_WithSingleLeaf_GeneratesEmptyProof()
+    {
+        // Arrange
+        var builder = new MerkleTreeStream();
+        var leafData = CreateLeafData("leaf1");
+
+        // Act
+        var proof = builder.GenerateProof(leafData, 0);
+
+        // Assert
+        Assert.NotNull(proof);
+        Assert.Equal(0, proof.LeafIndex);
+        Assert.Equal(0, proof.TreeHeight);
+        Assert.Empty(proof.SiblingHashes);
+        Assert.Empty(proof.SiblingIsRight);
+        Assert.Equal(leafData[0], proof.LeafValue);
+    }
+
+    [Fact]
+    public void GenerateProof_WithTwoLeaves_GeneratesValidProof()
+    {
+        // Arrange
+        var builder = new MerkleTreeStream();
+        var leafData = CreateLeafData("leaf1", "leaf2");
+        var metadata = builder.Build(leafData);
+
+        // Act - Generate proof for first leaf
+        var proof0 = builder.GenerateProof(leafData, 0);
+
+        // Assert
+        Assert.Equal(0, proof0.LeafIndex);
+        Assert.Equal(1, proof0.TreeHeight);
+        Assert.Single(proof0.SiblingHashes);
+        Assert.Single(proof0.SiblingIsRight);
+        Assert.True(proof0.SiblingIsRight[0]); // Sibling is on the right
+        Assert.Equal(leafData[0], proof0.LeafValue);
+
+        // Verify proof
+        var hashFunction = new Sha256HashFunction();
+        Assert.True(proof0.Verify(metadata.RootHash, hashFunction));
+
+        // Act - Generate proof for second leaf
+        var proof1 = builder.GenerateProof(leafData, 1);
+
+        // Assert
+        Assert.Equal(1, proof1.LeafIndex);
+        Assert.Equal(1, proof1.TreeHeight);
+        Assert.Single(proof1.SiblingHashes);
+        Assert.Single(proof1.SiblingIsRight);
+        Assert.False(proof1.SiblingIsRight[0]); // Sibling is on the left
+        Assert.Equal(leafData[1], proof1.LeafValue);
+
+        // Verify proof
+        Assert.True(proof1.Verify(metadata.RootHash, hashFunction));
+    }
+
+    [Fact]
+    public void GenerateProof_WithThreeLeaves_GeneratesValidProof()
+    {
+        // Arrange
+        var builder = new MerkleTreeStream();
+        var leafData = CreateLeafData("leaf1", "leaf2", "leaf3");
+        var metadata = builder.Build(leafData);
+        var hashFunction = new Sha256HashFunction();
+
+        // Act & Assert - Generate and verify proofs for all leaves
+        for (int i = 0; i < 3; i++)
+        {
+            var proof = builder.GenerateProof(leafData, i);
+            Assert.Equal(i, proof.LeafIndex);
+            Assert.Equal(2, proof.TreeHeight);
+            Assert.Equal(2, proof.SiblingHashes.Length);
+            Assert.Equal(2, proof.SiblingIsRight.Length);
+            Assert.Equal(leafData[i], proof.LeafValue);
+            Assert.True(proof.Verify(metadata.RootHash, hashFunction));
+        }
+    }
+
+    [Fact]
+    public void GenerateProof_WithSevenLeaves_GeneratesValidProof()
+    {
+        // Arrange
+        var builder = new MerkleTreeStream();
+        var leafData = CreateLeafData("l1", "l2", "l3", "l4", "l5", "l6", "l7");
+        var metadata = builder.Build(leafData);
+        var hashFunction = new Sha256HashFunction();
+
+        // Act & Assert - Generate and verify proofs for all leaves
+        for (int i = 0; i < 7; i++)
+        {
+            var proof = builder.GenerateProof(leafData, i);
+            Assert.Equal(i, proof.LeafIndex);
+            Assert.Equal(3, proof.TreeHeight);
+            Assert.Equal(3, proof.SiblingHashes.Length);
+            Assert.Equal(3, proof.SiblingIsRight.Length);
+            Assert.Equal(leafData[i], proof.LeafValue);
+            Assert.True(proof.Verify(metadata.RootHash, hashFunction));
+        }
+    }
+
+    [Fact]
+    public void GenerateProof_WithInvalidIndex_ThrowsArgumentOutOfRangeException()
+    {
+        // Arrange
+        var builder = new MerkleTreeStream();
+        var leafData = CreateLeafData("leaf1", "leaf2");
+
+        // Act & Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.GenerateProof(leafData, -1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.GenerateProof(leafData, 2));
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.GenerateProof(leafData, 100));
+    }
+
+    [Fact]
+    public void GenerateProof_WithNullLeafData_ThrowsArgumentNullException()
+    {
+        // Arrange
+        var builder = new MerkleTreeStream();
+
+        // Act & Assert
+        Assert.Throws<ArgumentNullException>(() => builder.GenerateProof(null!, 0));
+    }
+
+    [Fact]
+    public void GenerateProof_WithEmptyLeafData_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var builder = new MerkleTreeStream();
+        var emptyData = new List<byte[]>();
+
+        // Act & Assert
+        Assert.Throws<InvalidOperationException>(() => builder.GenerateProof(emptyData, 0));
+    }
+
+    [Fact]
+    public void GenerateProof_ProducesIdenticalResultsToMerkleTree()
+    {
+        // Arrange
+        var leafData = CreateLeafData("leaf1", "leaf2", "leaf3", "leaf4");
+        
+        var tree = new InMemoryMerkleTree(leafData);
+        var stream = new MerkleTreeStream();
+        var streamMetadata = stream.Build(leafData);
+
+        // Assert root hashes match
+        Assert.Equal(tree.GetRootHash(), streamMetadata.RootHash);
+
+        // Act & Assert - Compare proofs for each leaf
+        var hashFunction = new Sha256HashFunction();
+        for (int i = 0; i < 4; i++)
+        {
+            var treeProof = tree.GenerateProof(i);
+            var streamProof = stream.GenerateProof(leafData, i);
+
+            // Proofs should have same structure
+            Assert.Equal(treeProof.LeafIndex, streamProof.LeafIndex);
+            Assert.Equal(treeProof.TreeHeight, streamProof.TreeHeight);
+            Assert.Equal(treeProof.SiblingHashes.Length, streamProof.SiblingHashes.Length);
+
+            // Both should verify against the same root
+            Assert.True(treeProof.Verify(tree.GetRootHash(), hashFunction));
+            Assert.True(streamProof.Verify(streamMetadata.RootHash, hashFunction));
+            
+            // Sibling hashes should match
+            for (int j = 0; j < treeProof.SiblingHashes.Length; j++)
+            {
+                Assert.Equal(treeProof.SiblingHashes[j], streamProof.SiblingHashes[j]);
+                Assert.Equal(treeProof.SiblingIsRight[j], streamProof.SiblingIsRight[j]);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateProofAsync_WithSingleLeaf_GeneratesEmptyProof()
+    {
+        // Arrange
+        var builder = new MerkleTreeStream();
+        var leafData = CreateAsyncLeafData("leaf1");
+
+        // Act
+        var proof = await builder.GenerateProofAsync(leafData, 0);
+
+        // Assert
+        Assert.NotNull(proof);
+        Assert.Equal(0, proof.LeafIndex);
+        Assert.Equal(0, proof.TreeHeight);
+        Assert.Empty(proof.SiblingHashes);
+        Assert.Empty(proof.SiblingIsRight);
+    }
+
+    [Fact]
+    public async Task GenerateProofAsync_WithThreeLeaves_GeneratesValidProof()
+    {
+        // Arrange
+        var builder = new MerkleTreeStream();
+        var leafDataSync = CreateLeafData("leaf1", "leaf2", "leaf3");
+        var leafDataAsync = CreateAsyncLeafData("leaf1", "leaf2", "leaf3");
+        var metadata = await builder.BuildAsync(CreateAsyncLeafData("leaf1", "leaf2", "leaf3"));
+        var hashFunction = new Sha256HashFunction();
+
+        // Act
+        var proof1 = await builder.GenerateProofAsync(CreateAsyncLeafData("leaf1", "leaf2", "leaf3"), 1);
+
+        // Assert
+        Assert.Equal(1, proof1.LeafIndex);
+        Assert.Equal(2, proof1.TreeHeight);
+        Assert.Equal(2, proof1.SiblingHashes.Length);
+        Assert.Equal(2, proof1.SiblingIsRight.Length);
+        Assert.True(proof1.Verify(metadata.RootHash, hashFunction));
+    }
+
+    [Fact]
+    public async Task GenerateProofAsync_WithInvalidIndex_ThrowsArgumentOutOfRangeException()
+    {
+        // Arrange
+        var builder = new MerkleTreeStream();
+        var leafData = CreateAsyncLeafData("leaf1", "leaf2");
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            async () => await builder.GenerateProofAsync(leafData, -1));
+    }
+
+    [Fact]
+    public async Task GenerateProofAsync_WithNullLeafData_ThrowsArgumentNullException()
+    {
+        // Arrange
+        var builder = new MerkleTreeStream();
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentNullException>(
+            async () => await builder.GenerateProofAsync(null!, 0));
+    }
+
+    [Fact]
+    public void GenerateProof_WithLargeTree_GeneratesValidProof()
+    {
+        // Arrange - Create a larger tree with 100 leaves
+        var leafData = Enumerable.Range(0, 100)
+            .Select(i => Encoding.UTF8.GetBytes($"leaf{i}"))
+            .ToList();
+        
+        var builder = new MerkleTreeStream();
+        var metadata = builder.Build(leafData);
+        var hashFunction = new Sha256HashFunction();
+
+        // Act & Assert - Test a few representative leaves
+        var testIndices = new[] { 0, 1, 50, 99 };
+        foreach (var index in testIndices)
+        {
+            var proof = builder.GenerateProof(leafData, index);
+            var isValid = proof.Verify(metadata.RootHash, hashFunction);
+            
+            Assert.True(isValid, $"Proof for leaf {index} should be valid");
+            Assert.Equal(leafData[index], proof.LeafValue);
+        }
+    }
+
+    #endregion
 }

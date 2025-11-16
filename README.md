@@ -318,6 +318,36 @@ A `MerkleProof` contains:
 - **SiblingHashes**: Hashes of sibling nodes at each level from leaf to root
 - **SiblingIsRight**: Orientation bits indicating whether each sibling is on the right (true) or left (false)
 
+### Streaming Proof Generation
+
+For large datasets using `MerkleTreeStream`, proof generation requires the leaf data to be provided again:
+
+```csharp
+var builder = new MerkleTreeStream();
+
+// Stream large dataset
+var leafData = ReadLargeDataset(); // IEnumerable<byte[]>
+var metadata = builder.Build(leafData);
+
+// Generate proof (requires re-providing the data)
+var proof = builder.GenerateProof(ReadLargeDataset(), leafIndex: 1000);
+
+// Verify the proof
+var hashFunction = new Sha256HashFunction();
+bool isValid = proof.Verify(metadata.RootHash, hashFunction);
+```
+
+The streaming builder also supports async proof generation:
+
+```csharp
+var builder = new MerkleTreeStream();
+var asyncLeafData = ReadLargeDatasetAsync(); // IAsyncEnumerable<byte[]>
+var metadata = await builder.BuildAsync(asyncLeafData);
+
+// Generate proof asynchronously
+var proof = await builder.GenerateProofAsync(ReadLargeDatasetAsync(), leafIndex: 1000);
+```
+
 ### Use Cases
 
 - **Inclusion proofs**: Prove that data exists in a Merkle tree without revealing other data
@@ -398,8 +428,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
   - Proof contains leaf value, index, tree height, sibling hashes, and orientation bits
   - Built-in verification method to validate proofs against root hash
   - Support for non-power-of-two trees with padding nodes
+  - Available for both in-memory `MerkleTree` and streaming `MerkleTreeStream`
+  - Async proof generation support for streaming scenarios
   - Comprehensive test coverage for various tree sizes and edge cases
-- Comprehensive test coverage (132+ tests)
+- Comprehensive test coverage (145+ tests)
 
 ## Support
 
