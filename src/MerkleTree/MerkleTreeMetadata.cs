@@ -48,4 +48,32 @@ public class MerkleTreeMetadata
         Height = height;
         LeafCount = leafCount;
     }
+
+    /// <summary>
+    /// Serializes the root hash to a fixed-size binary form.
+    /// </summary>
+    /// <returns>The root hash as a byte array.</returns>
+    /// <remarks>
+    /// This is a convenience method that serializes the root node's hash.
+    /// The size of the returned array depends on the hash function used to create the tree.
+    /// </remarks>
+    public byte[] SerializeRoot()
+    {
+        return Root.Serialize();
+    }
+
+    /// <summary>
+    /// Deserializes a root hash from its binary representation.
+    /// </summary>
+    /// <param name="data">The binary data to deserialize.</param>
+    /// <returns>A new <see cref="MerkleTreeNode"/> representing the root.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="data"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="data"/> is empty.</exception>
+    /// <remarks>
+    /// This is a convenience method that deserializes a root node from binary data.
+    /// </remarks>
+    public static MerkleTreeNode DeserializeRoot(byte[] data)
+    {
+        return MerkleTreeNode.Deserialize(data);
+    }
 }
