@@ -41,51 +41,9 @@ bool isValid = proof.Verify(rootHash, hashFunction);
 Console.WriteLine($"Proof Valid: {isValid}");
 ```
 
-## Streaming Trees (Small Datasets)
+## Streaming Trees
 
-For datasets that fit in memory but use streaming construction:
-
-```csharp
-var builder = new MerkleTreeStream();
-
-// Build tree from streaming data
-var leafData = GetLeafData(); // IEnumerable<byte[]>
-var metadata = builder.Build(leafData);
-
-// Generate proof (rebuilds tree each time)
-var proof = builder.GenerateProof(leafData, leafIndex: 100);
-
-// Verify the proof
-var hashFunction = new Sha256HashFunction();
-bool isValid = proof.Verify(metadata.RootHash, hashFunction);
-```
-
-### Using a Cache for Multiple Proofs
-
-When generating multiple proofs, use an external cache to avoid rebuilding the tree:
-
-```csharp
-var builder = new MerkleTreeStream();
-var metadata = builder.Build(leafData);
-
-// Create a cache to reuse across multiple proof generations
-var cache = new Dictionary<(int level, long index), byte[]>();
-
-// Generate multiple proofs using the same cache
-var proof1 = builder.GenerateProof(leafData, 100, cache);
-var proof2 = builder.GenerateProof(leafData, 200, cache);
-var proof3 = builder.GenerateProof(leafData, 300, cache);
-// After the first proof, subsequent proofs reuse cached hashes
-```
-
-**Performance:**
-- Without cache: O(n) time per proof - rebuilds the entire tree
-- With cache: First proof is O(n), subsequent proofs reuse cached hashes
-- Cache stores ~2n entries (all tree levels)
-
-## Streaming Trees (Large Datasets)
-
-For datasets larger than available memory, provide the `leafCount` parameter to enable streaming mode:
+`MerkleTreeStream` is designed for large datasets that don't fit in memory. For datasets that fit in memory, use `MerkleTree` instead for better performance.
 
 ```csharp
 var builder = new MerkleTreeStream();
@@ -120,12 +78,12 @@ var proof2 = builder.GenerateProof(GetLeafDataStream(), 200, leafCount, cache);
 ```
 
 **Important Notes:**
-- When `leafCount` is provided, streaming mode is enabled automatically
+- `leafCount` is **required** - you must know the total number of leaves beforehand
 - The leaf data stream must be re-enumerable (or provide a fresh stream for each call)
 - Only one tree level is kept in memory at a time
 - The leaf at the requested index will be accessed by enumerating to that position
 - Cache is externally managed for flexibility
-- If `leafCount` is omitted, the method converts data to a list (suitable for smaller datasets)
+- For datasets that fit in memory, use `MerkleTree` instead for better performance
 
 ## Async Proof Generation
 
@@ -134,22 +92,17 @@ For async scenarios:
 ```csharp
 var builder = new MerkleTreeStream();
 var metadata = await builder.BuildAsync(GetLeafDataAsync());
-
-// Without cache (list mode)
-var proof = await builder.GenerateProofAsync(
-    GetLeafDataAsync(), 
-    leafIndex: 1000);
-
-// With streaming mode for large datasets
 long leafCount = 1_000_000;
-var proof2 = await builder.GenerateProofAsync(
+
+// Generate proof asynchronously
+var proof = await builder.GenerateProofAsync(
     GetLeafDataAsync(), 
     leafIndex: 1000,
     leafCount: leafCount);
 
-// With cache and streaming
+// With cache for multiple proofs
 var cache = new Dictionary<(int level, long index), byte[]>();
-var proof3 = await builder.GenerateProofAsync(
+var proof2 = await builder.GenerateProofAsync(
     GetLeafDataAsync(), 
     leafIndex: 1000,
     leafCount: leafCount,
@@ -195,17 +148,18 @@ The verification process:
 
 | Scenario | Time Complexity | Space Complexity | Notes |
 |----------|----------------|------------------|-------|
-| In-memory tree | O(1) | O(1) | Tree already built |
-| Streaming (list mode, no cache) | O(n) | O(n) for list | Converts to list, rebuilds tree |
-| Streaming (list mode, with cache) | O(n) first, O(1) after | O(n) | Cache stores all hashes |
-| Streaming (leafCount mode) | O(n) | O(n/2) per level | Memory efficient, processes stream |
+| `MerkleTree` | O(1) | O(1) | Tree already built in memory |
+| `MerkleTreeStream` (no cache) | O(n) | O(n/2) per level | Rebuilds tree each time, memory efficient |
+| `MerkleTreeStream` (with cache) | O(n) first, reuses after | O(n) for cache | Cache stores all hashes |
 
 ## Best Practices
 
-1. **Use in-memory trees when possible**: If your dataset fits in memory, use `MerkleTree` for best performance
-2. **Cache for multiple proofs**: If generating multiple proofs, always use a cache
-3. **Provide leafCount for large datasets**: Pass the `leafCount` parameter to enable streaming mode and avoid loading all data into memory
-4. **Re-enumerable streams**: Ensure your data stream can be enumerated multiple times when using streaming mode
+1. **Choose the right class**:
+   - Use `MerkleTree` for datasets that fit in memory (best performance)
+   - Use `MerkleTreeStream` only for large datasets that don't fit in memory
+2. **Cache for multiple proofs**: If generating multiple proofs with `MerkleTreeStream`, always use a cache to avoid rebuilding
+3. **Know your leaf count**: `MerkleTreeStream.GenerateProof` requires the total leaf count as a parameter
+4. **Re-enumerable streams**: Ensure your data stream can be enumerated multiple times when using `MerkleTreeStream`
 5. **Hash function consistency**: Use the same hash function for building and verification
 
 ## Error Handling

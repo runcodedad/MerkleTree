@@ -258,198 +258,41 @@ public class MerkleTreeStream : MerkleTreeBase
     }
 
     /// <summary>
-    /// Generates a Merkle proof for the leaf at the specified index.
+    /// Generates a Merkle proof for the leaf at the specified index using streaming data.
     /// </summary>
-    /// <param name="leafData">The original leaf data (must be provided again for streaming).</param>
+    /// <param name="leafData">The original leaf data stream (must be provided again for streaming). The stream should be re-enumerable.</param>
     /// <param name="leafIndex">The 0-based index of the leaf to generate a proof for.</param>
-    /// <param name="leafCount">Optional total number of leaves. If provided, processes data in streaming fashion without loading all into memory. If null, converts data to list (requires all data fits in memory).</param>
+    /// <param name="leafCount">The total number of leaves in the dataset. Required for streaming mode.</param>
     /// <param name="cache">Optional cache mapping (level, index) to hash. If provided, hashes are retrieved from cache when available and stored when computed.</param>
     /// <returns>A <see cref="MerkleProof"/> containing all information needed to verify the leaf.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="leafData"/> is null.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the leaf index is invalid.</exception>
     /// <exception cref="InvalidOperationException">Thrown when no leaves are provided.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="leafCount"/> is provided but is less than or equal to zero.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="leafCount"/> is less than or equal to zero.</exception>
     /// <remarks>
     /// <para>
-    /// This method supports two modes:
+    /// This method processes data in streaming fashion without loading all leaves into memory.
+    /// Only one tree level is kept in memory at a time, making it suitable for large datasets
+    /// that don't fit in memory. The leaf data stream should be re-enumerable.
     /// </para>
-    /// <list type="bullet">
-    /// <item><description><b>Streaming mode</b> (when leafCount is provided): Processes data in streaming fashion without loading all leaves into memory. Only one tree level is kept in memory at a time. The leaf data stream should be re-enumerable.</description></item>
-    /// <item><description><b>List mode</b> (when leafCount is null): Converts leaf data to a list for processing. Suitable when data fits in memory or for backward compatibility.</description></item>
-    /// </list>
     /// <para>
     /// If a cache is provided, it will be used to avoid recomputing hashes that are already cached.
     /// The cache can be shared across multiple proof generations to improve performance.
     /// </para>
+    /// <para>
+    /// For datasets that fit in memory, consider using <see cref="MerkleTree"/> instead,
+    /// which provides better performance for proof generation.
+    /// </para>
     /// </remarks>
-    public MerkleProof GenerateProof(IEnumerable<byte[]> leafData, long leafIndex, long? leafCount = null, Dictionary<(int level, long index), byte[]>? cache = null)
+    public MerkleProof GenerateProof(IEnumerable<byte[]> leafData, long leafIndex, long leafCount, Dictionary<(int level, long index), byte[]>? cache = null)
     {
         if (leafData == null)
             throw new ArgumentNullException(nameof(leafData));
 
-        if (leafCount.HasValue && leafCount.Value <= 0)
+        if (leafCount <= 0)
             throw new ArgumentException("Leaf count must be greater than zero.", nameof(leafCount));
 
-        // Streaming mode: process data without loading everything into memory
-        if (leafCount.HasValue)
-        {
-            return GenerateProofStreamingInternal(leafData, leafCount.Value, leafIndex, cache);
-        }
-
-        // List mode: convert to list for backward compatibility
-        var leafList = leafData.ToList();
-
-        if (leafList.Count == 0)
-            throw new InvalidOperationException("At least one leaf is required to generate a proof.");
-
-        if (leafIndex < 0 || leafIndex >= leafList.Count)
-        {
-            throw new ArgumentOutOfRangeException(nameof(leafIndex),
-                $"Leaf index must be between 0 and {leafList.Count - 1}.");
-        }
-
-        // For a single leaf tree, there's no path to traverse
-        if (leafList.Count == 1)
-        {
-            return new MerkleProof(
-                leafList[0],
-                0,
-                0,
-                Array.Empty<byte[]>(),
-                Array.Empty<bool>());
-        }
-
-        // Calculate tree height without building the tree
-        int height = CalculateTreeHeight(leafList.Count);
-
-        var siblingHashes = new List<byte[]>();
-        var siblingIsRight = new List<bool>();
-
-        // Build the tree level by level, using cache if provided
-        // Start with level 0 (leaf hashes)
-        var currentLevel = GetOrComputeLevel(leafList, 0, cache);
-        long currentIndex = leafIndex;
-
-        // Traverse from leaf to root
-        for (int level = 0; level < height; level++)
-        {
-            // Determine if current node is on left or right
-            bool isLeftChild = currentIndex % 2 == 0;
-            long siblingIndex;
-            bool siblingOnRight;
-
-            if (isLeftChild)
-            {
-                // Current node is left child, sibling is on the right
-                siblingIndex = currentIndex + 1;
-                siblingOnRight = true;
-            }
-            else
-            {
-                // Current node is right child, sibling is on the left
-                siblingIndex = currentIndex - 1;
-                siblingOnRight = false;
-            }
-
-            // Get the sibling hash from the current level
-            byte[] siblingHash;
-            if (siblingIndex < currentLevel.Count)
-            {
-                // Sibling exists in the current level
-                siblingHash = currentLevel[(int)siblingIndex];
-            }
-            else
-            {
-                // No sibling exists - create padding hash
-                siblingHash = CreatePaddingHash(currentLevel[(int)currentIndex]);
-            }
-
-            siblingHashes.Add(siblingHash);
-            siblingIsRight.Add(siblingOnRight);
-
-            // Move to parent level
-            currentIndex = currentIndex / 2;
-
-            // Build the next level for the next iteration
-            if (level < height - 1)
-            {
-                currentLevel = GetOrComputeLevel(leafList, level + 1, cache, currentLevel);
-            }
-        }
-
-        return new MerkleProof(
-            leafList[(int)leafIndex],
-            leafIndex,
-            height,
-            siblingHashes.ToArray(),
-            siblingIsRight.ToArray());
-    }
-
-    /// <summary>
-    /// Gets a level's hashes from cache or computes them.
-    /// </summary>
-    /// <param name="leafList">The list of leaf data.</param>
-    /// <param name="targetLevel">The level to retrieve or compute.</param>
-    /// <param name="cache">Optional cache for storing computed hashes.</param>
-    /// <param name="previousLevel">The previous level's hashes (used to compute the target level).</param>
-    /// <returns>A list of hashes for the specified level.</returns>
-    private List<byte[]> GetOrComputeLevel(List<byte[]> leafList, int targetLevel, Dictionary<(int level, long index), byte[]>? cache, List<byte[]>? previousLevel = null)
-    {
-        // Check if we can use the cache
-        if (cache != null && targetLevel > 0)
-        {
-            // Try to get the entire level from cache
-            long levelSize = GetLevelSize(leafList.Count, targetLevel);
-            var cachedLevel = new List<byte[]>();
-            bool allCached = true;
-
-            for (long i = 0; i < levelSize; i++)
-            {
-                if (cache.TryGetValue((targetLevel, i), out var hash))
-                {
-                    cachedLevel.Add(hash);
-                }
-                else
-                {
-                    allCached = false;
-                    break;
-                }
-            }
-
-            if (allCached)
-            {
-                return cachedLevel;
-            }
-        }
-
-        // Compute the level
-        List<byte[]> level;
-        if (targetLevel == 0)
-        {
-            // Level 0: hash all leaves
-            level = leafList.Select(leaf => ComputeHash(leaf)).ToList();
-        }
-        else
-        {
-            // Higher levels: use previous level or build from scratch
-            if (previousLevel == null)
-            {
-                // Need to build from scratch
-                previousLevel = GetOrComputeLevel(leafList, targetLevel - 1, cache);
-            }
-            level = BuildNextLevel(previousLevel);
-        }
-
-        // Store in cache if provided
-        if (cache != null)
-        {
-            for (long i = 0; i < level.Count; i++)
-            {
-                cache[(targetLevel, i)] = level[(int)i];
-            }
-        }
-
-        return level;
+        return GenerateProofStreamingInternal(leafData, leafCount, leafIndex, cache);
     }
 
     /// <summary>
@@ -673,33 +516,37 @@ public class MerkleTreeStream : MerkleTreeBase
     /// <summary>
     /// Generates a Merkle proof for the leaf at the specified index asynchronously.
     /// </summary>
-    /// <param name="leafData">The original leaf data (must be provided again for streaming).</param>
+    /// <param name="leafData">The original leaf data stream (must be provided again for streaming). The stream should be re-enumerable.</param>
     /// <param name="leafIndex">The 0-based index of the leaf to generate a proof for.</param>
-    /// <param name="leafCount">Optional total number of leaves. If provided, uses streaming mode after collecting async data. If null, collects all data into list.</param>
+    /// <param name="leafCount">The total number of leaves in the dataset. Required for streaming mode.</param>
     /// <param name="cache">Optional cache mapping (level, index) to hash. If provided, hashes are retrieved from cache when available and stored when computed.</param>
     /// <param name="cancellationToken">A cancellation token to cancel the operation.</param>
     /// <returns>A task that returns a <see cref="MerkleProof"/> containing all information needed to verify the leaf.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="leafData"/> is null.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the leaf index is invalid.</exception>
     /// <exception cref="InvalidOperationException">Thrown when no leaves are provided.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="leafCount"/> is provided but is less than or equal to zero.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="leafCount"/> is less than or equal to zero.</exception>
     /// <remarks>
     /// <para>
-    /// This method collects the async enumerable into a list, then uses the synchronous implementation.
-    /// If leafCount is provided, the synchronous method will use streaming mode.
+    /// This method collects the async enumerable into a list, then uses the synchronous streaming implementation.
+    /// Only one tree level is kept in memory at a time, making it suitable for large datasets.
+    /// </para>
+    /// <para>
+    /// For datasets that fit in memory, consider using <see cref="MerkleTree"/> instead,
+    /// which provides better performance for proof generation.
     /// </para>
     /// </remarks>
     public async Task<MerkleProof> GenerateProofAsync(
         IAsyncEnumerable<byte[]> leafData,
         long leafIndex,
-        long? leafCount = null,
+        long leafCount,
         Dictionary<(int level, long index), byte[]>? cache = null,
         CancellationToken cancellationToken = default)
     {
         if (leafData == null)
             throw new ArgumentNullException(nameof(leafData));
 
-        if (leafCount.HasValue && leafCount.Value <= 0)
+        if (leafCount <= 0)
             throw new ArgumentException("Leaf count must be greater than zero.", nameof(leafCount));
 
         // Convert to list to allow indexing and counting
@@ -709,7 +556,7 @@ public class MerkleTreeStream : MerkleTreeBase
             leafList.Add(leaf);
         }
 
-        // Use the synchronous implementation with the collected list
+        // Use the synchronous streaming implementation with the collected list
         return GenerateProof(leafList, leafIndex, leafCount, cache);
     }
 

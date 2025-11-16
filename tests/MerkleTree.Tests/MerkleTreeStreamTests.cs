@@ -524,7 +524,7 @@ public class MerkleTreeStreamTests
         var leafData = CreateLeafData("leaf1");
 
         // Act
-        var proof = builder.GenerateProof(leafData, 0);
+        var proof = builder.GenerateProof(leafData, 0, leafData.Count);
 
         // Assert
         Assert.NotNull(proof);
@@ -544,7 +544,7 @@ public class MerkleTreeStreamTests
         var metadata = builder.Build(leafData);
 
         // Act - Generate proof for first leaf
-        var proof0 = builder.GenerateProof(leafData, 0);
+        var proof0 = builder.GenerateProof(leafData, 0, leafData.Count);
 
         // Assert
         Assert.Equal(0, proof0.LeafIndex);
@@ -559,7 +559,7 @@ public class MerkleTreeStreamTests
         Assert.True(proof0.Verify(metadata.RootHash, hashFunction));
 
         // Act - Generate proof for second leaf
-        var proof1 = builder.GenerateProof(leafData, 1);
+        var proof1 = builder.GenerateProof(leafData, 1, leafData.Count);
 
         // Assert
         Assert.Equal(1, proof1.LeafIndex);
@@ -585,7 +585,7 @@ public class MerkleTreeStreamTests
         // Act & Assert - Generate and verify proofs for all leaves
         for (int i = 0; i < 3; i++)
         {
-            var proof = builder.GenerateProof(leafData, i);
+            var proof = builder.GenerateProof(leafData, i, leafData.Count);
             Assert.Equal(i, proof.LeafIndex);
             Assert.Equal(2, proof.TreeHeight);
             Assert.Equal(2, proof.SiblingHashes.Length);
@@ -607,7 +607,7 @@ public class MerkleTreeStreamTests
         // Act & Assert - Generate and verify proofs for all leaves
         for (int i = 0; i < 7; i++)
         {
-            var proof = builder.GenerateProof(leafData, i);
+            var proof = builder.GenerateProof(leafData, i, leafData.Count);
             Assert.Equal(i, proof.LeafIndex);
             Assert.Equal(3, proof.TreeHeight);
             Assert.Equal(3, proof.SiblingHashes.Length);
@@ -625,9 +625,9 @@ public class MerkleTreeStreamTests
         var leafData = CreateLeafData("leaf1", "leaf2");
 
         // Act & Assert
-        Assert.Throws<ArgumentOutOfRangeException>(() => builder.GenerateProof(leafData, -1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => builder.GenerateProof(leafData, 2));
-        Assert.Throws<ArgumentOutOfRangeException>(() => builder.GenerateProof(leafData, 100));
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.GenerateProof(leafData, -1, leafData.Count));
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.GenerateProof(leafData, 2, leafData.Count));
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.GenerateProof(leafData, 100, leafData.Count));
     }
 
     [Fact]
@@ -637,7 +637,7 @@ public class MerkleTreeStreamTests
         var builder = new MerkleTreeStream();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => builder.GenerateProof(null!, 0));
+        Assert.Throws<ArgumentNullException>(() => builder.GenerateProof(null!, 0, 1));
     }
 
     [Fact]
@@ -648,7 +648,7 @@ public class MerkleTreeStreamTests
         var emptyData = new List<byte[]>();
 
         // Act & Assert
-        Assert.Throws<InvalidOperationException>(() => builder.GenerateProof(emptyData, 0));
+        Assert.Throws<ArgumentException>(() => builder.GenerateProof(emptyData, 0, 0));
     }
 
     [Fact]
@@ -669,7 +669,7 @@ public class MerkleTreeStreamTests
         for (int i = 0; i < 4; i++)
         {
             var treeProof = tree.GenerateProof(i);
-            var streamProof = stream.GenerateProof(leafData, i);
+            var streamProof = stream.GenerateProof(leafData, i, leafData.Count);
 
             // Proofs should have same structure
             Assert.Equal(treeProof.LeafIndex, streamProof.LeafIndex);
@@ -697,7 +697,7 @@ public class MerkleTreeStreamTests
         var leafData = CreateAsyncLeafData("leaf1");
 
         // Act
-        var proof = await builder.GenerateProofAsync(leafData, 0);
+        var proof = await builder.GenerateProofAsync(leafData, 0, 1);
 
         // Assert
         Assert.NotNull(proof);
@@ -718,7 +718,7 @@ public class MerkleTreeStreamTests
         var hashFunction = new Sha256HashFunction();
 
         // Act
-        var proof1 = await builder.GenerateProofAsync(CreateAsyncLeafData("leaf1", "leaf2", "leaf3"), 1);
+        var proof1 = await builder.GenerateProofAsync(CreateAsyncLeafData("leaf1", "leaf2", "leaf3"), 1, 3);
 
         // Assert
         Assert.Equal(1, proof1.LeafIndex);
@@ -737,7 +737,7 @@ public class MerkleTreeStreamTests
 
         // Act & Assert
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            async () => await builder.GenerateProofAsync(leafData, -1));
+            async () => await builder.GenerateProofAsync(leafData, -1, 2));
     }
 
     [Fact]
@@ -748,7 +748,7 @@ public class MerkleTreeStreamTests
 
         // Act & Assert
         await Assert.ThrowsAsync<ArgumentNullException>(
-            async () => await builder.GenerateProofAsync(null!, 0));
+            async () => await builder.GenerateProofAsync(null!, 0, 1));
     }
 
     [Fact]
@@ -767,7 +767,7 @@ public class MerkleTreeStreamTests
         var testIndices = new[] { 0, 1, 50, 99 };
         foreach (var index in testIndices)
         {
-            var proof = builder.GenerateProof(leafData, index);
+            var proof = builder.GenerateProof(leafData, index, leafData.Count);
             var isValid = proof.Verify(metadata.RootHash, hashFunction);
             
             Assert.True(isValid, $"Proof for leaf {index} should be valid");
