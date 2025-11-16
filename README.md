@@ -276,6 +276,55 @@ var blake3Root = treeBlake3.Root.Serialize();  // 32 bytes
 
 The serialization format is simply the raw hash bytes, providing minimal overhead while maintaining deterministic behavior.
 
+## Merkle Proof Generation and Verification
+
+The library provides Merkle proof generation to verify that a specific leaf is part of the tree without having access to all the data.
+
+### Basic Usage
+
+```csharp
+using MerkleTree;
+using System.Text;
+
+var leafData = new List<byte[]>
+{
+    Encoding.UTF8.GetBytes("data1"),
+    Encoding.UTF8.GetBytes("data2"),
+    Encoding.UTF8.GetBytes("data3")
+};
+
+var tree = new MerkleTree(leafData);
+var rootHash = tree.GetRootHash();
+
+// Generate a proof for leaf at index 1
+var proof = tree.GenerateProof(1);
+
+Console.WriteLine($"Leaf Index: {proof.LeafIndex}");
+Console.WriteLine($"Tree Height: {proof.TreeHeight}");
+Console.WriteLine($"Sibling Hashes: {proof.SiblingHashes.Length}");
+
+// Verify the proof
+var hashFunction = new Sha256HashFunction();
+bool isValid = proof.Verify(rootHash, hashFunction);
+Console.WriteLine($"Proof Valid: {isValid}");
+```
+
+### Proof Structure
+
+A `MerkleProof` contains:
+- **LeafValue**: The original data of the leaf being proven
+- **LeafIndex**: The position of the leaf in the tree (0-based)
+- **TreeHeight**: The total height of the tree
+- **SiblingHashes**: Hashes of sibling nodes at each level from leaf to root
+- **SiblingIsRight**: Orientation bits indicating whether each sibling is on the right (true) or left (false)
+
+### Use Cases
+
+- **Inclusion proofs**: Prove that data exists in a Merkle tree without revealing other data
+- **Distributed verification**: Allow clients to verify data against a trusted root hash
+- **Blockchain applications**: Verify transactions in blocks
+- **Data integrity**: Prove specific data is part of a larger verified dataset
+
 ## Requirements
 
 - **.NET 10.0** or later, or
@@ -339,12 +388,18 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
   - Incremental level-by-level tree construction
   - Returns tree metadata (root hash, height, leaf count)
   - Produces identical results to in-memory construction
-- **Root serialization** (NEW)
+- **Root serialization**
   - Fixed-size binary serialization for Merkle roots
   - Deterministic format matching hash function size
   - Validated serialization and deserialization
   - Round-trip safe with defensive copying
-- Comprehensive test coverage (112+ tests)
+- **Merkle proof generation and verification** (NEW)
+  - Generate proofs for any leaf index
+  - Proof contains leaf value, index, tree height, sibling hashes, and orientation bits
+  - Built-in verification method to validate proofs against root hash
+  - Support for non-power-of-two trees with padding nodes
+  - Comprehensive test coverage for various tree sizes and edge cases
+- Comprehensive test coverage (132+ tests)
 
 ## Support
 
