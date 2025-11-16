@@ -329,26 +329,49 @@ var builder = new MerkleTreeStream();
 var leafData = ReadLargeDataset(); // IEnumerable<byte[]>
 var metadata = builder.Build(leafData);
 
-// Generate proof (requires re-providing the data)
-var proof = builder.GenerateProof(ReadLargeDataset(), leafIndex: 1000);
+// Generate proof without cache (rebuilds each time)
+var proof = builder.GenerateProof(leafData, leafIndex: 1000);
 
 // Verify the proof
 var hashFunction = new Sha256HashFunction();
 bool isValid = proof.Verify(metadata.RootHash, hashFunction);
 ```
 
-The streaming builder also supports async proof generation:
+#### Using a Cache for Multiple Proofs
+
+To improve performance when generating multiple proofs, use an external cache:
+
+```csharp
+var builder = new MerkleTreeStream();
+var metadata = builder.Build(leafData);
+
+// Create a cache to reuse across multiple proof generations
+var cache = new Dictionary<(int level, long index), byte[]>();
+
+// Generate multiple proofs using the same cache
+var proof1 = builder.GenerateProof(leafData, 100, cache);
+var proof2 = builder.GenerateProof(leafData, 200, cache);
+var proof3 = builder.GenerateProof(leafData, 300, cache);
+// After the first proof, subsequent proofs reuse cached hashes
+```
+
+The streaming builder also supports async proof generation with optional caching:
 
 ```csharp
 var builder = new MerkleTreeStream();
 var asyncLeafData = ReadLargeDatasetAsync(); // IAsyncEnumerable<byte[]>
 var metadata = await builder.BuildAsync(asyncLeafData);
 
-// Generate proof asynchronously
-var proof = await builder.GenerateProofAsync(ReadLargeDatasetAsync(), leafIndex: 1000);
+// Generate proof asynchronously with cache
+var cache = new Dictionary<(int level, long index), byte[]>();
+var proof = await builder.GenerateProofAsync(ReadLargeDatasetAsync(), leafIndex: 1000, cache);
 ```
 
-**Performance Note**: The streaming proof generation builds the tree level by level (O(n) time complexity) but only stores one level in memory at a time, making it memory-efficient for large datasets. While it processes all leaves to generate the proof, it avoids storing the entire tree structure.
+**Performance Note**: 
+- Without cache: O(n) time per proof - rebuilds the entire tree each time
+- With cache: First proof is O(n), subsequent proofs reuse cached hashes
+- Memory: Only stores one level at a time plus the cache
+- Cache is externally managed: caller controls lifecycle and can share across proof generations
 
 ### Use Cases
 
