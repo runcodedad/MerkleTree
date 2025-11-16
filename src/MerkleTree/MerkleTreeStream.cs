@@ -48,6 +48,19 @@ public class MerkleTreeStream : MerkleTreeBase
     /// <returns>A task that returns the Merkle tree metadata including root hash, height, and leaf count.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="leafData"/> is null.</exception>
     /// <exception cref="InvalidOperationException">Thrown when no leaves are provided.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method uses temporary file storage to avoid loading entire tree levels into memory.
+    /// It's designed to handle datasets of any size, including 500GB+ files with billions of leaves.
+    /// </para>
+    /// <para>
+    /// The algorithm:
+    /// 1. Streams through leaf data, writing hashes to a temporary file (Level 0)
+    /// 2. Reads level file in chunks, computes parent hashes, writes to next level file
+    /// 3. Continues until reaching the root
+    /// 4. Cleans up temporary files automatically
+    /// </para>
+    /// </remarks>
     public async Task<MerkleTreeMetadata> BuildAsync(
         IAsyncEnumerable<byte[]> leafData,
         CancellationToken cancellationToken = default)
@@ -55,34 +68,79 @@ public class MerkleTreeStream : MerkleTreeBase
         if (leafData == null)
             throw new ArgumentNullException(nameof(leafData));
 
-        // Build Level 0 by streaming and hashing leaves
-        var level0Hashes = new List<byte[]>();
-        long leafCount = 0;
+        // Create temporary directory for level files
+        string tempDir = Path.Combine(Path.GetTempPath(), $"merkletree_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
 
-        await foreach (var leaf in leafData.WithCancellation(cancellationToken))
+        try
         {
-            var hash = ComputeHash(leaf);
-            level0Hashes.Add(hash);
-            leafCount++;
+            // Build Level 0 by streaming and hashing leaves to a temp file
+            string level0File = Path.Combine(tempDir, "level_0.dat");
+            long leafCount = 0;
+
+            await using (var fileStream = new FileStream(level0File, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+            await using (var writer = new BinaryWriter(fileStream))
+            {
+                await foreach (var leaf in leafData.WithCancellation(cancellationToken))
+                {
+                    var hash = ComputeHash(leaf);
+                    writer.Write(hash.Length);
+                    writer.Write(hash);
+                    leafCount++;
+                }
+            }
+
+            if (leafCount == 0)
+                throw new InvalidOperationException("At least one leaf is required to build a Merkle tree.");
+
+            // Build tree bottom-up level by level using temp files
+            int height = 0;
+            long currentLevelSize = leafCount;
+            string currentLevelFile = level0File;
+
+            while (currentLevelSize > 1)
+            {
+                string nextLevelFile = Path.Combine(tempDir, $"level_{height + 1}.dat");
+                long nextLevelSize = await BuildNextLevelFromFileAsync(currentLevelFile, nextLevelFile, currentLevelSize, cancellationToken);
+                
+                // Clean up previous level file (except level 0 which we might need for proofs)
+                if (height > 0)
+                {
+                    File.Delete(currentLevelFile);
+                }
+                
+                currentLevelFile = nextLevelFile;
+                currentLevelSize = nextLevelSize;
+                height++;
+            }
+
+            // Read the root hash
+            byte[] rootHash;
+            using (var fileStream = new FileStream(currentLevelFile, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var reader = new BinaryReader(fileStream))
+            {
+                int hashLength = reader.ReadInt32();
+                rootHash = reader.ReadBytes(hashLength);
+            }
+
+            var rootNode = new MerkleTreeNode(rootHash);
+            return new MerkleTreeMetadata(rootNode, height, leafCount);
         }
-
-        if (leafCount == 0)
-            throw new InvalidOperationException("At least one leaf is required to build a Merkle tree.");
-
-        // Build tree bottom-up
-        var currentLevel = level0Hashes;
-        int height = 0;
-
-        while (currentLevel.Count > 1)
+        finally
         {
-            currentLevel = BuildNextLevel(currentLevel);
-            height++;
+            // Clean up all temporary files
+            try
+            {
+                if (Directory.Exists(tempDir))
+                {
+                    Directory.Delete(tempDir, recursive: true);
+                }
+            }
+            catch
+            {
+                // Best effort cleanup - ignore errors
+            }
         }
-
-        var rootHash = currentLevel[0];
-        var rootNode = new MerkleTreeNode(rootHash);
-
-        return new MerkleTreeMetadata(rootNode, height, leafCount);
     }
 
     /// <summary>
@@ -92,71 +150,208 @@ public class MerkleTreeStream : MerkleTreeBase
     /// <returns>The Merkle tree metadata including root hash, height, and leaf count.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="leafData"/> is null.</exception>
     /// <exception cref="InvalidOperationException">Thrown when no leaves are provided.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method uses temporary file storage to avoid loading entire tree levels into memory.
+    /// It's designed to handle datasets of any size, including 500GB+ files with billions of leaves.
+    /// </para>
+    /// <para>
+    /// The algorithm:
+    /// 1. Streams through leaf data, writing hashes to a temporary file (Level 0)
+    /// 2. Reads level file in chunks, computes parent hashes, writes to next level file
+    /// 3. Continues until reaching the root
+    /// 4. Cleans up temporary files automatically
+    /// </para>
+    /// </remarks>
     public MerkleTreeMetadata Build(IEnumerable<byte[]> leafData)
     {
         if (leafData == null)
             throw new ArgumentNullException(nameof(leafData));
 
-        // Build Level 0 by streaming and hashing leaves
-        var level0Hashes = new List<byte[]>();
-        long leafCount = 0;
+        // Create temporary directory for level files
+        string tempDir = Path.Combine(Path.GetTempPath(), $"merkletree_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
 
-        foreach (var leaf in leafData)
+        try
         {
-            var hash = ComputeHash(leaf);
-            level0Hashes.Add(hash);
-            leafCount++;
+            // Build Level 0 by streaming and hashing leaves to a temp file
+            string level0File = Path.Combine(tempDir, "level_0.dat");
+            long leafCount = 0;
+
+            using (var fileStream = new FileStream(level0File, FileMode.Create, FileAccess.Write, FileShare.None, 81920))
+            using (var writer = new BinaryWriter(fileStream))
+            {
+                foreach (var leaf in leafData)
+                {
+                    var hash = ComputeHash(leaf);
+                    writer.Write(hash.Length);
+                    writer.Write(hash);
+                    leafCount++;
+                }
+            }
+
+            if (leafCount == 0)
+                throw new InvalidOperationException("At least one leaf is required to build a Merkle tree.");
+
+            // Build tree bottom-up level by level using temp files
+            int height = 0;
+            long currentLevelSize = leafCount;
+            string currentLevelFile = level0File;
+
+            while (currentLevelSize > 1)
+            {
+                string nextLevelFile = Path.Combine(tempDir, $"level_{height + 1}.dat");
+                long nextLevelSize = BuildNextLevelFromFile(currentLevelFile, nextLevelFile, currentLevelSize);
+                
+                // Clean up previous level file
+                if (height > 0)
+                {
+                    File.Delete(currentLevelFile);
+                }
+                
+                currentLevelFile = nextLevelFile;
+                currentLevelSize = nextLevelSize;
+                height++;
+            }
+
+            // Read the root hash
+            byte[] rootHash;
+            using (var fileStream = new FileStream(currentLevelFile, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var reader = new BinaryReader(fileStream))
+            {
+                int hashLength = reader.ReadInt32();
+                rootHash = reader.ReadBytes(hashLength);
+            }
+
+            var rootNode = new MerkleTreeNode(rootHash);
+            return new MerkleTreeMetadata(rootNode, height, leafCount);
         }
-
-        if (leafCount == 0)
-            throw new InvalidOperationException("At least one leaf is required to build a Merkle tree.");
-
-        // Build tree bottom-up
-        var currentLevel = level0Hashes;
-        int height = 0;
-
-        while (currentLevel.Count > 1)
+        finally
         {
-            currentLevel = BuildNextLevel(currentLevel);
-            height++;
+            // Clean up all temporary files
+            try
+            {
+                if (Directory.Exists(tempDir))
+                {
+                    Directory.Delete(tempDir, recursive: true);
+                }
+            }
+            catch
+            {
+                // Best effort cleanup - ignore errors
+            }
         }
-
-        var rootHash = currentLevel[0];
-        var rootNode = new MerkleTreeNode(rootHash);
-
-        return new MerkleTreeMetadata(rootNode, height, leafCount);
     }
 
     /// <summary>
-    /// Builds the next level of the tree from the current level.
+    /// Builds the next level of the tree by reading from a file and writing to another file.
     /// </summary>
-    private List<byte[]> BuildNextLevel(List<byte[]> currentLevel)
+    /// <param name="currentLevelFile">Path to the file containing current level hashes.</param>
+    /// <param name="nextLevelFile">Path to the file where next level hashes will be written.</param>
+    /// <param name="currentLevelSize">Number of nodes in the current level.</param>
+    /// <returns>The number of nodes in the next level.</returns>
+    private long BuildNextLevelFromFile(string currentLevelFile, string nextLevelFile, long currentLevelSize)
     {
-        var nextLevel = new List<byte[]>();
+        long nextLevelSize = 0;
 
-        for (int i = 0; i < currentLevel.Count; i += 2)
+        using (var readStream = new FileStream(currentLevelFile, FileMode.Open, FileAccess.Read, FileShare.Read, 81920))
+        using (var reader = new BinaryReader(readStream))
+        using (var writeStream = new FileStream(nextLevelFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920))
+        using (var writer = new BinaryWriter(writeStream))
         {
-            var leftHash = currentLevel[i];
-            byte[] rightHash;
+            long nodesProcessed = 0;
 
-            // Check if we have an odd number of nodes (unpaired node at the end)
-            if (i + 1 < currentLevel.Count)
+            while (nodesProcessed < currentLevelSize)
             {
-                // Normal case: pair with the next node
-                rightHash = currentLevel[i + 1];
-            }
-            else
-            {
-                // Odd case: create padding hash using domain-separated hashing
-                rightHash = CreatePaddingHash(leftHash);
-            }
+                // Read left hash
+                int leftHashLength = reader.ReadInt32();
+                byte[] leftHash = reader.ReadBytes(leftHashLength);
+                nodesProcessed++;
 
-            // Create parent hash: Hash(left || right)
-            var parentHash = ComputeParentHash(leftHash, rightHash);
-            nextLevel.Add(parentHash);
+                byte[] rightHash;
+
+                // Check if we have a right sibling
+                if (nodesProcessed < currentLevelSize)
+                {
+                    // Read right hash
+                    int rightHashLength = reader.ReadInt32();
+                    rightHash = reader.ReadBytes(rightHashLength);
+                    nodesProcessed++;
+                }
+                else
+                {
+                    // Odd node: create padding hash
+                    rightHash = CreatePaddingHash(leftHash);
+                }
+
+                // Compute parent hash
+                byte[] parentHash = ComputeParentHash(leftHash, rightHash);
+                
+                // Write parent hash to next level file
+                writer.Write(parentHash.Length);
+                writer.Write(parentHash);
+                nextLevelSize++;
+            }
         }
 
-        return nextLevel;
+        return nextLevelSize;
+    }
+
+    /// <summary>
+    /// Builds the next level of the tree by reading from a file and writing to another file asynchronously.
+    /// </summary>
+    /// <param name="currentLevelFile">Path to the file containing current level hashes.</param>
+    /// <param name="nextLevelFile">Path to the file where next level hashes will be written.</param>
+    /// <param name="currentLevelSize">Number of nodes in the current level.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The number of nodes in the next level.</returns>
+    private async Task<long> BuildNextLevelFromFileAsync(string currentLevelFile, string nextLevelFile, long currentLevelSize, CancellationToken cancellationToken)
+    {
+        long nextLevelSize = 0;
+
+        await using (var readStream = new FileStream(currentLevelFile, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true))
+        using (var reader = new BinaryReader(readStream))
+        await using (var writeStream = new FileStream(nextLevelFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+        using (var writer = new BinaryWriter(writeStream))
+        {
+            long nodesProcessed = 0;
+
+            while (nodesProcessed < currentLevelSize)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                // Read left hash
+                int leftHashLength = reader.ReadInt32();
+                byte[] leftHash = reader.ReadBytes(leftHashLength);
+                nodesProcessed++;
+
+                byte[] rightHash;
+
+                // Check if we have a right sibling
+                if (nodesProcessed < currentLevelSize)
+                {
+                    // Read right hash
+                    int rightHashLength = reader.ReadInt32();
+                    rightHash = reader.ReadBytes(rightHashLength);
+                    nodesProcessed++;
+                }
+                else
+                {
+                    // Odd node: create padding hash
+                    rightHash = CreatePaddingHash(leftHash);
+                }
+
+                // Compute parent hash
+                byte[] parentHash = ComputeParentHash(leftHash, rightHash);
+                
+                // Write parent hash to next level file
+                writer.Write(parentHash.Length);
+                writer.Write(parentHash);
+                nextLevelSize++;
+            }
+        }
+
+        return nextLevelSize;
     }
 
     /// <summary>

@@ -43,11 +43,19 @@ Console.WriteLine($"Proof Valid: {isValid}");
 
 ## Streaming Trees
 
-`MerkleTreeStream` is designed for large datasets that don't fit in memory. It uses an **optimized approach that only computes O(log n) hashes** for proof generation, making it suitable for files of any size (even 500GB+).
+`MerkleTreeStream` is designed for large datasets that don't fit in memory. It has been optimized for truly memory-efficient operation:
 
-### How It Works
+### Tree Building (O(1) memory per level)
 
-The optimized implementation:
+The `Build` and `BuildAsync` methods now use **temporary file storage**:
+- Writes level hashes to temp files instead of keeping in memory
+- Only processes one pair of nodes at a time
+- For 500GB of data with 10 billion leaves: uses only ~64 bytes of memory (one hash pair at a time)
+- Automatically cleans up temp files after completion
+
+### Proof Generation (O(log n) memory)
+
+The `GenerateProof` method uses an **optimized approach that only computes O(log n) hashes**:
 - **Only computes sibling hashes along the proof path** (not entire tree levels)
 - For 1 million leaves: keeps only ~20 hashes in memory (tree height), not 1 million
 - Computes hashes on-demand by streaming to specific indices

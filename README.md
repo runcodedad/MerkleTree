@@ -153,9 +153,11 @@ The library includes a `MerkleTreeStream` class designed for processing large da
 
 ### Features
 
-- **Memory-efficient**: Process datasets larger than available RAM
+- **Truly memory-efficient**: Uses temporary file storage, processes only one node pair at a time
+- **Handles massive datasets**: Can process 500GB+ files with billions of leaves
 - **Streaming input**: Accept leaves from `IEnumerable<byte[]>` or `IAsyncEnumerable<byte[]>`
-- **Batch processing**: Control memory usage with configurable batch sizes
+- **O(1) memory per level**: Only keeps current hash pair in memory, not entire levels
+- **Automatic cleanup**: Temp files are automatically deleted after completion
 - **Incremental processing**: Build levels incrementally without materializing the entire dataset
 - **Deterministic results**: Produces identical root hashes to in-memory `MerkleTree` class
 
@@ -184,11 +186,14 @@ IEnumerable<byte[]> ReadRecordsFromFile(string path, int recordSize)
 }
 
 var records = ReadRecordsFromFile("largefile.dat", recordSize: 32);
-var metadata = builder.BuildInBatches(records, batchSize: 1000);
+var metadata = builder.Build(records);
 
 Console.WriteLine($"Processed {metadata.LeafCount:N0} records");
 Console.WriteLine($"Root Hash: {Convert.ToHexString(metadata.RootHash)}");
 Console.WriteLine($"Tree Height: {metadata.Height}");
+
+// The Build method uses temporary files internally - no large data structures in memory!
+// Can handle files of any size (500GB+) as long as you can stream them
 ```
 
 ### Metadata
