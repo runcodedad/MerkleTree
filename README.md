@@ -301,7 +301,34 @@ var hashFunction = new Sha256HashFunction();
 bool isValid = proof.Verify(tree.GetRootHash(), hashFunction);
 ```
 
-For streaming scenarios and advanced usage, see [Proof Generation Documentation](docs/PROOF_GENERATION.md).
+### Proof Serialization
+
+Proofs can be serialized to a compact binary format for storage or transmission:
+
+```csharp
+// Serialize proof to binary
+byte[] serialized = proof.Serialize();
+
+// Save to file or transmit over network
+File.WriteAllBytes("proof.bin", serialized);
+
+// Deserialize back to proof
+byte[] data = File.ReadAllBytes("proof.bin");
+var deserializedProof = MerkleProof.Deserialize(data);
+
+// Verify deserialized proof
+bool isValid = deserializedProof.Verify(rootHash, hashFunction);
+```
+
+The serialization format is:
+- **Deterministic**: Same proof always produces identical binary output
+- **Platform-independent**: Works across different architectures and operating systems
+- **Compact**: Minimal overhead beyond essential proof data
+- **Version-safe**: Future-proof with format versioning
+
+For streaming scenarios, advanced usage, and format specification, see:
+- [Proof Generation Documentation](docs/PROOF_GENERATION.md)
+- [Proof Serialization Format](docs/PROOF_SERIALIZATION.md)
 
 ## Requirements
 
@@ -337,6 +364,7 @@ dotnet pack -c Release
 For detailed information, see:
 
 - [Proof Generation Documentation](docs/PROOF_GENERATION.md) - Complete guide to generating and verifying Merkle proofs
+- [Proof Serialization Format](docs/PROOF_SERIALIZATION.md) - Binary serialization format specification
 - [Streaming Documentation](docs/STREAMING.md) - Details on streaming tree construction for large datasets
 - XML documentation comments in the source code
 - IntelliSense in your IDE
@@ -372,7 +400,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
   - Deterministic format matching hash function size
   - Validated serialization and deserialization
   - Round-trip safe with defensive copying
-- **Merkle proof generation and verification** (NEW)
+- **Merkle proof generation and verification**
   - Generate proofs for any leaf index
   - Proof contains leaf value, index, tree height, sibling hashes, and orientation bits
   - Built-in verification method to validate proofs against root hash
@@ -380,7 +408,15 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
   - Available for both in-memory `MerkleTree` and streaming `MerkleTreeStream`
   - Async proof generation support for streaming scenarios
   - Comprehensive test coverage for various tree sizes and edge cases
-- Comprehensive test coverage (145+ tests)
+- **Proof serialization** (NEW)
+  - Compact binary serialization format for Merkle proofs
+  - Deterministic and platform-independent encoding
+  - Support for all hash functions (SHA-256, SHA-512, BLAKE3)
+  - Efficient bit-packing for orientation flags
+  - Complete round-trip preservation without information loss
+  - Extensive validation during deserialization
+  - Documented format specification for cross-platform implementation
+- Comprehensive test coverage (159+ tests)
 
 ## Support
 

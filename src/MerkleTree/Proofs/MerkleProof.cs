@@ -149,4 +149,215 @@ public class MerkleProof
         // Compare the computed root hash with the expected root hash
         return currentHash.SequenceEqual(expectedRootHash);
     }
+
+    /// <summary>
+    /// Serializes this Merkle proof to a compact binary format.
+    /// </summary>
+    /// <returns>A byte array containing the serialized proof.</returns>
+    /// <remarks>
+    /// <para>
+    /// The serialization format is deterministic and platform-independent.
+    /// It can be deserialized using the <see cref="Deserialize"/> method.
+    /// </para>
+    /// <para>
+    /// Format specification:
+    /// - Version (1 byte): Format version number (currently 1)
+    /// - Tree Height (4 bytes): int32, little-endian
+    /// - Leaf Index (8 bytes): int64, little-endian
+    /// - Leaf Value Length (4 bytes): int32, little-endian
+    /// - Leaf Value (variable): raw bytes
+    /// - Hash Size (4 bytes): int32, little-endian (size of each sibling hash)
+    /// - Orientation Bits Length (4 bytes): int32, little-endian (number of bytes for packed bits)
+    /// - Orientation Bits (variable): bool[] packed into bytes (8 bits per byte)
+    /// - Sibling Hashes (variable): consecutive hash bytes (TreeHeight * HashSize)
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when sibling hashes have inconsistent sizes.</exception>
+    public byte[] Serialize()
+    {
+        // Determine hash size from first sibling hash, or 0 if no siblings
+        int hashSize = TreeHeight > 0 ? SiblingHashes[0].Length : 0;
+
+        // Validate that all sibling hashes have the same size
+        for (int i = 0; i < SiblingHashes.Length; i++)
+        {
+            if (SiblingHashes[i] == null)
+                throw new InvalidOperationException($"Sibling hash at index {i} is null.");
+            if (SiblingHashes[i].Length != hashSize)
+                throw new InvalidOperationException($"Sibling hash at index {i} has size {SiblingHashes[i].Length}, expected {hashSize}.");
+        }
+
+        // Pack orientation bits into bytes
+        int orientationBytesLength = TreeHeight > 0 ? (TreeHeight + 7) / 8 : 0;
+        byte[] orientationBytes = new byte[orientationBytesLength];
+        for (int i = 0; i < TreeHeight; i++)
+        {
+            if (SiblingIsRight[i])
+            {
+                int byteIndex = i / 8;
+                int bitIndex = i % 8;
+                orientationBytes[byteIndex] |= (byte)(1 << bitIndex);
+            }
+        }
+
+        // Calculate total size
+        int totalSize = 1 + // version
+                       4 + // tree height
+                       8 + // leaf index
+                       4 + LeafValue.Length + // leaf value length + data
+                       4 + // hash size
+                       4 + orientationBytesLength + // orientation bits length + data
+                       (TreeHeight * hashSize); // sibling hashes
+
+        byte[] result = new byte[totalSize];
+        int offset = 0;
+
+        // Write version
+        result[offset++] = 1;
+
+        // Write tree height
+        BitConverter.GetBytes(TreeHeight).CopyTo(result, offset);
+        offset += 4;
+
+        // Write leaf index
+        BitConverter.GetBytes(LeafIndex).CopyTo(result, offset);
+        offset += 8;
+
+        // Write leaf value length and data
+        BitConverter.GetBytes(LeafValue.Length).CopyTo(result, offset);
+        offset += 4;
+        LeafValue.CopyTo(result, offset);
+        offset += LeafValue.Length;
+
+        // Write hash size
+        BitConverter.GetBytes(hashSize).CopyTo(result, offset);
+        offset += 4;
+
+        // Write orientation bits length and data
+        BitConverter.GetBytes(orientationBytesLength).CopyTo(result, offset);
+        offset += 4;
+        orientationBytes.CopyTo(result, offset);
+        offset += orientationBytesLength;
+
+        // Write sibling hashes
+        for (int i = 0; i < TreeHeight; i++)
+        {
+            SiblingHashes[i].CopyTo(result, offset);
+            offset += hashSize;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Deserializes a Merkle proof from binary format.
+    /// </summary>
+    /// <param name="data">The serialized proof data.</param>
+    /// <returns>A new <see cref="MerkleProof"/> instance.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when data is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when data is invalid or corrupted.</exception>
+    /// <remarks>
+    /// The data must have been created by the <see cref="Serialize"/> method.
+    /// See <see cref="Serialize"/> for the format specification.
+    /// </remarks>
+    public static MerkleProof Deserialize(byte[] data)
+    {
+        if (data == null)
+            throw new ArgumentNullException(nameof(data));
+        if (data.Length < 1)
+            throw new ArgumentException("Data is too short to be a valid serialized proof.", nameof(data));
+
+        int offset = 0;
+
+        // Read version
+        byte version = data[offset++];
+        if (version != 1)
+            throw new ArgumentException($"Unsupported serialization version: {version}. Expected version 1.", nameof(data));
+
+        if (data.Length < 1 + 4 + 8 + 4)
+            throw new ArgumentException("Data is too short to contain header fields.", nameof(data));
+
+        // Read tree height
+        int treeHeight = BitConverter.ToInt32(data, offset);
+        offset += 4;
+
+        if (treeHeight < 0)
+            throw new ArgumentException($"Invalid tree height: {treeHeight}. Must be non-negative.", nameof(data));
+
+        // Read leaf index
+        long leafIndex = BitConverter.ToInt64(data, offset);
+        offset += 8;
+
+        if (leafIndex < 0)
+            throw new ArgumentException($"Invalid leaf index: {leafIndex}. Must be non-negative.", nameof(data));
+
+        // Read leaf value length
+        int leafValueLength = BitConverter.ToInt32(data, offset);
+        offset += 4;
+
+        if (leafValueLength < 0)
+            throw new ArgumentException($"Invalid leaf value length: {leafValueLength}. Must be non-negative.", nameof(data));
+        if (offset + leafValueLength > data.Length)
+            throw new ArgumentException("Data is too short to contain leaf value.", nameof(data));
+
+        // Read leaf value
+        byte[] leafValue = new byte[leafValueLength];
+        Array.Copy(data, offset, leafValue, 0, leafValueLength);
+        offset += leafValueLength;
+
+        // Read hash size
+        if (offset + 4 > data.Length)
+            throw new ArgumentException("Data is too short to contain hash size.", nameof(data));
+        int hashSize = BitConverter.ToInt32(data, offset);
+        offset += 4;
+
+        if (hashSize < 0)
+            throw new ArgumentException($"Invalid hash size: {hashSize}. Must be non-negative.", nameof(data));
+
+        // Read orientation bits length
+        if (offset + 4 > data.Length)
+            throw new ArgumentException("Data is too short to contain orientation bits length.", nameof(data));
+        int orientationBytesLength = BitConverter.ToInt32(data, offset);
+        offset += 4;
+
+        if (orientationBytesLength < 0)
+            throw new ArgumentException($"Invalid orientation bits length: {orientationBytesLength}. Must be non-negative.", nameof(data));
+
+        // Validate orientation bytes length matches tree height
+        int expectedOrientationBytesLength = treeHeight > 0 ? (treeHeight + 7) / 8 : 0;
+        if (orientationBytesLength != expectedOrientationBytesLength)
+            throw new ArgumentException($"Orientation bits length {orientationBytesLength} does not match expected {expectedOrientationBytesLength} for tree height {treeHeight}.", nameof(data));
+
+        if (offset + orientationBytesLength > data.Length)
+            throw new ArgumentException("Data is too short to contain orientation bits.", nameof(data));
+
+        // Read and unpack orientation bits
+        bool[] siblingIsRight = new bool[treeHeight];
+        for (int i = 0; i < treeHeight; i++)
+        {
+            int byteIndex = i / 8;
+            int bitIndex = i % 8;
+            siblingIsRight[i] = (data[offset + byteIndex] & (1 << bitIndex)) != 0;
+        }
+        offset += orientationBytesLength;
+
+        // Read sibling hashes
+        int totalHashesSize = treeHeight * hashSize;
+        if (offset + totalHashesSize > data.Length)
+            throw new ArgumentException($"Data is too short to contain {treeHeight} sibling hashes of size {hashSize}.", nameof(data));
+
+        byte[][] siblingHashes = new byte[treeHeight][];
+        for (int i = 0; i < treeHeight; i++)
+        {
+            siblingHashes[i] = new byte[hashSize];
+            Array.Copy(data, offset, siblingHashes[i], 0, hashSize);
+            offset += hashSize;
+        }
+
+        // Verify we've consumed all the data
+        if (offset != data.Length)
+            throw new ArgumentException($"Data contains {data.Length - offset} extra bytes after deserialization.", nameof(data));
+
+        return new MerkleProof(leafValue, leafIndex, treeHeight, siblingHashes, siblingIsRight);
+    }
 }
