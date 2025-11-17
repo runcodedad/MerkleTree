@@ -231,7 +231,7 @@ public class MerkleTreeStream(IHashFunction hashFunction) : MerkleTreeBase(hashF
     /// <param name="leafData">The original leaf data stream (must be provided again for streaming). The stream should be re-enumerable.</param>
     /// <param name="leafIndex">The 0-based index of the leaf to generate a proof for.</param>
     /// <param name="leafCount">The total number of leaves in the dataset.</param>
-    /// <param name="cache">Optional cache mapping (level, index) to hash. If provided, hashes are retrieved from cache when available and stored when computed.</param>
+    /// <param name="cache">Optional read-only cache mapping (level, index) to hash. If provided, hashes are retrieved from cache when available to avoid recomputation.</param>
     /// <param name="cancellationToken">A cancellation token to cancel the operation.</param>
     /// <returns>A task that returns a <see cref="MerkleProof"/> containing all information needed to verify the leaf.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="leafData"/> is null.</exception>
@@ -245,7 +245,7 @@ public class MerkleTreeStream(IHashFunction hashFunction) : MerkleTreeBase(hashF
     /// </para>
     /// <para>
     /// If a cache is provided, sibling hashes are retrieved from cache when available, allowing proofs to be generated
-    /// without re-streaming the data. The cache can be an in-memory dictionary or a disk-based storage system.
+    /// without re-streaming the data. The cache is used in read-only mode and must be managed externally.
     /// </para>
     /// <para>
     /// For datasets that fit in memory, consider using <see cref="MerkleTree"/> instead,
@@ -360,24 +360,12 @@ public class MerkleTreeStream(IHashFunction hashFunction) : MerkleTreeBase(hashF
                     if (siblingIndex < levelSize && siblingLeaf != null)
                     {
                         siblingHash = ComputeHash(siblingLeaf);
-                        
-                        // Also cache the current leaf hash if cache is provided
-                        if (cache != null)
-                        {
-                            cache[(level, currentIndex)] = ComputeHash(targetLeaf);
-                            cache[(level, siblingIndex)] = siblingHash;
-                        }
                     }
                     else
                     {
                         // No sibling - create padding hash
                         var currentHash = ComputeHash(targetLeaf);
                         siblingHash = CreatePaddingHash(currentHash);
-                        
-                        if (cache != null)
-                        {
-                            cache[(level, currentIndex)] = currentHash;
-                        }
                     }
                 }
                 else
@@ -403,12 +391,8 @@ public class MerkleTreeStream(IHashFunction hashFunction) : MerkleTreeBase(hashF
                         rightChildHash = CreatePaddingHash(leftChildHash);
                     }
                     
-                    // Compute and cache current node
+                    // Compute current node
                     byte[] currentHash = ComputeParentHash(leftChildHash, rightChildHash);
-                    if (cache != null)
-                    {
-                        cache[(level, currentIndex)] = currentHash;
-                    }
                     
                     // Now compute sibling
                     if (siblingIndex < levelSize)
@@ -428,11 +412,6 @@ public class MerkleTreeStream(IHashFunction hashFunction) : MerkleTreeBase(hashF
                         }
                         
                         siblingHash = ComputeParentHash(leftChildHash, rightChildHash);
-                        
-                        if (cache != null)
-                        {
-                            cache[(level, siblingIndex)] = siblingHash;
-                        }
                     }
                     else
                     {
@@ -536,12 +515,6 @@ public class MerkleTreeStream(IHashFunction hashFunction) : MerkleTreeBase(hashF
             }
             
             hash = ComputeParentHash(leftChildHash, rightChildHash);
-        }
-        
-        // Store in cache
-        if (cache != null)
-        {
-            cache[((int)level, index)] = hash;
         }
         
         return hash;
