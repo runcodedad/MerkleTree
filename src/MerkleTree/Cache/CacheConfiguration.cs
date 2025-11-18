@@ -41,11 +41,22 @@ public class CacheConfiguration
     /// <param name="endLevel">The ending level to cache.</param>
     /// <exception cref="ArgumentException">Thrown when parameters are invalid.</exception>
     public CacheConfiguration(int startLevel, int endLevel)
+        : this(startLevel, endLevel, true)
     {
-        if (startLevel < 0)
-            throw new ArgumentException("Start level must be non-negative.", nameof(startLevel));
-        if (endLevel < startLevel)
-            throw new ArgumentException("End level must be greater than or equal to start level.", nameof(endLevel));
+    }
+
+    /// <summary>
+    /// Internal constructor that allows bypassing validation for special cases.
+    /// </summary>
+    private CacheConfiguration(int startLevel, int endLevel, bool validate)
+    {
+        if (validate)
+        {
+            if (startLevel < 0)
+                throw new ArgumentException("Start level must be non-negative.", nameof(startLevel));
+            if (endLevel < startLevel)
+                throw new ArgumentException("End level must be greater than or equal to start level.", nameof(endLevel));
+        }
 
         StartLevel = startLevel;
         EndLevel = endLevel;
@@ -83,8 +94,12 @@ public class CacheConfiguration
     /// Creates a disabled cache configuration.
     /// </summary>
     /// <returns>A cache configuration that disables caching.</returns>
+    /// <remarks>
+    /// This creates a configuration where IsEnabled returns false by using
+    /// a negative start level to indicate disabled state.
+    /// </remarks>
     public static CacheConfiguration Disabled()
     {
-        return new CacheConfiguration(0, -1);
+        return new CacheConfiguration(-1, -1, validate: false);
     }
 }
