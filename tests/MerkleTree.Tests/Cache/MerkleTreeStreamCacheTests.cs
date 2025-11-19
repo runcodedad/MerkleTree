@@ -114,13 +114,12 @@ public class MerkleTreeStreamCacheTests
             await stream.BuildAsync(leafData, cacheConfig);
 
             // Act
-            var loadedCache = CacheHelper.LoadCache(tempFile);
+            var loadedCache = CacheFileManager.LoadCache(tempFile);
 
             // Assert
             Assert.NotNull(loadedCache);
-            Assert.NotNull(loadedCache.Data);
             Assert.NotNull(loadedCache.Statistics);
-            Assert.True(loadedCache.Data.Levels.Count > 0);
+            Assert.True(loadedCache.Levels.Count > 0);
         }
         finally
         {
@@ -130,7 +129,7 @@ public class MerkleTreeStreamCacheTests
     }
 
     [Fact]
-    public async Task CacheWithStats_TracksStatistics()
+    public async Task CacheData_TracksStatistics()
     {
         // Arrange
         var stream = new MerkleTreeStream();
@@ -141,7 +140,7 @@ public class MerkleTreeStreamCacheTests
         {
             var cacheConfig = new CacheConfiguration(tempFile, topLevelsToCache: 2);
             await stream.BuildAsync(leafData, cacheConfig);
-            var cache = CacheHelper.LoadCache(tempFile);
+            var cache = CacheFileManager.LoadCache(tempFile);
 
             // Act - Use TryGetNode to trigger statistics tracking
             bool hit = cache.TryGetNode(1, 0, out var value);
@@ -175,7 +174,7 @@ public class MerkleTreeStreamCacheTests
         {
             var cacheConfig = new CacheConfiguration(tempFile, topLevelsToCache: 3);
             var metadata = await stream.BuildAsync(leafData1, cacheConfig);
-            var cache = CacheHelper.LoadCache(tempFile);
+            var cache = CacheFileManager.LoadCache(tempFile);
             var leafData2 = CreateLeafDataAsync(16);
 
             // Act
@@ -212,7 +211,7 @@ public class MerkleTreeStreamCacheTests
         {
             var cacheConfig = new CacheConfiguration(tempFile, topLevelsToCache: 2);
             var metadata = await stream.BuildAsync(leafData1, cacheConfig);
-            var cache = CacheHelper.LoadCache(tempFile);
+            var cache = CacheFileManager.LoadCache(tempFile);
             
             // Act - Generate proof with cache
             var leafData2 = CreateLeafDataAsync(16);
@@ -259,20 +258,19 @@ public class MerkleTreeStreamCacheTests
             // Act - Cache top 2 levels
             var cacheConfig = new CacheConfiguration(tempFile, topLevelsToCache: 2);
             var metadata = await stream.BuildAsync(leafData, cacheConfig);
-            var cache = CacheHelper.LoadCache(tempFile);
+            var cache = CacheFileManager.LoadCache(tempFile);
 
             // Assert
             Assert.NotNull(cache);
-            Assert.NotNull(cache.Data);
-            Assert.Equal(4, cache.Data.Metadata.TreeHeight);
+            Assert.Equal(4, cache.Metadata.TreeHeight);
             
             // Should cache levels 2 and 3 (top 2 levels, excluding root at level 4)
-            Assert.Equal(2, cache.Data.Metadata.StartLevel);
-            Assert.Equal(3, cache.Data.Metadata.EndLevel);
+            Assert.Equal(2, cache.Metadata.StartLevel);
+            Assert.Equal(3, cache.Metadata.EndLevel);
             
             // Verify the levels exist
-            Assert.True(cache.Data.Levels.ContainsKey(2));
-            Assert.True(cache.Data.Levels.ContainsKey(3));
+            Assert.True(cache.Levels.ContainsKey(2));
+            Assert.True(cache.Levels.ContainsKey(3));
         }
         finally
         {

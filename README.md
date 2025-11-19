@@ -366,7 +366,7 @@ Console.WriteLine($"Root Hash: {Convert.ToHexString(metadata.RootHash)}");
 
 ```csharp
 // Load cache from file - automatically includes statistics tracking
-var cache = CacheHelper.LoadCache("merkle.cache");
+var cache = CacheFileManager.LoadCache("merkle.cache");
 
 // Generate proof with cache - avoids recomputing cached nodes
 var stream = new MerkleTreeStream(new Sha256HashFunction());
@@ -380,7 +380,7 @@ var proof = await stream.GenerateProofAsync(
 bool isValid = proof.Verify(metadata.RootHash, new Sha256HashFunction());
 Console.WriteLine($"Proof valid: {isValid}");
 
-// View cache statistics
+// View cache statistics (tracked automatically during proof generation)
 Console.WriteLine(cache.Statistics);
 // Output: "Cache Stats: 30 hits, 10 misses, 75.00% hit rate (40 total lookups)"
 ```

@@ -186,7 +186,15 @@ public class MerkleTreeStream(IHashFunction hashFunction) : MerkleTreeBase(hashF
                     int startLevel = finalLevels[0].level;
                     int endLevel = finalLevels[finalLevels.Count - 1].level;
 
-                    await BuildCacheFileAsync(finalLevels, startLevel, endLevel, height, cacheConfig.FilePath!, cancellationToken);
+                    await CacheFileManager.BuildCacheFileAsync(
+                        finalLevels, 
+                        startLevel, 
+                        endLevel, 
+                        height, 
+                        _hashFunction.Name,
+                        _hashFunction.HashSizeInBytes,
+                        cacheConfig.FilePath!, 
+                        cancellationToken);
                 }
             }
 
@@ -206,58 +214,6 @@ public class MerkleTreeStream(IHashFunction hashFunction) : MerkleTreeBase(hashF
             {
                 // Best effort cleanup - ignore errors
             }
-        }
-    }
-
-    /// <summary>
-    /// Builds a cache file from level files on disk.
-    /// </summary>
-    private async Task BuildCacheFileAsync(
-        List<(int level, string filePath, long nodeCount)> allLevels,
-        int startLevel,
-        int endLevel,
-        int treeHeight,
-        string cacheFilePath,
-        CancellationToken cancellationToken)
-    {
-        // Read the selected levels from disk and build cache
-        var levels = new Dictionary<int, CachedLevel>();
-
-        foreach (var (level, filePath, nodeCount) in allLevels)
-        {
-            if (level >= startLevel && level <= endLevel)
-            {
-                // Read all nodes from this level file
-                var nodes = new List<byte[]>();
-                
-                await using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true))
-                using (var reader = new BinaryReader(fileStream))
-                {
-                    for (long i = 0; i < nodeCount; i++)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        int hashLength = reader.ReadInt32();
-                        byte[] hash = reader.ReadBytes(hashLength);
-                        nodes.Add(hash);
-                    }
-                }
-
-                levels[level] = new CachedLevel(level, nodes.ToArray());
-            }
-        }
-
-        if (levels.Count > 0)
-        {
-            var cacheMetadata = new CacheMetadata(
-                treeHeight,
-                _hashFunction.Name,
-                _hashFunction.HashSizeInBytes,
-                startLevel,
-                endLevel);
-
-            var cacheData = new CacheData(cacheMetadata, levels);
-            var serialized = CacheSerializer.Serialize(cacheData);
-            await File.WriteAllBytesAsync(cacheFilePath, serialized, cancellationToken);
         }
     }
 
@@ -382,7 +338,7 @@ public class MerkleTreeStream(IHashFunction hashFunction) : MerkleTreeBase(hashF
         IAsyncEnumerable<byte[]> leafData,
         long leafIndex,
         long leafCount,
-        CacheWithStats? cache = null,
+        CacheData? cache = null,
         CancellationToken cancellationToken = default)
     {
         if (leafData == null)
@@ -588,7 +544,7 @@ public class MerkleTreeStream(IHashFunction hashFunction) : MerkleTreeBase(hashF
         long level,
         long index,
         long leafCount,
-        CacheWithStats? cache,
+        CacheData? cache,
         CancellationToken cancellationToken)
     {
         // Try cache first
