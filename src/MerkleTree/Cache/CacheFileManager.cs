@@ -42,9 +42,16 @@ public static class CacheFileManager
     /// <param name="cacheFilePath">Path where cache file should be written.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Task that completes when cache file is built.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when:
+    /// - A level file is truncated or corrupted (unexpected end of file, invalid hash lengths, hash size mismatches)
+    /// - File I/O errors occur (file not found, access denied, etc.)
+    /// All exceptions include detailed context about the level, node, file path, and nature of the error.
+    /// </exception>
     /// <remarks>
     /// This method reads the selected level files from disk, packages them into a cache
     /// data structure, serializes it, and writes it to the specified cache file path.
+    /// File integrity is validated during reading to detect corruption or truncation early.
     /// </remarks>
     public static async Task BuildCacheFileAsync(
         List<(int level, string filePath, long nodeCount)> allLevels,
