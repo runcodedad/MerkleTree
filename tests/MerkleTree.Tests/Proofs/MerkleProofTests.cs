@@ -416,19 +416,14 @@ public class MerkleProofTests
     [Fact]
     public void Verify_WithNullSiblingHash_ThrowsInvalidOperationException()
     {
-        // Arrange
-        var proof = new MerkleProof(
+        // Act & Assert - Constructor now validates and throws ArgumentException instead
+        var exception = Assert.Throws<ArgumentException>(() => new MerkleProof(
             new byte[] { 1, 2, 3 },
             0,
             1,
             new byte[][] { null! },
-            new bool[] { true });
+            new bool[] { true }));
 
-        var hashFunction = new Sha256HashFunction();
-        var rootHash = new byte[] { 1, 2, 3 };
-
-        // Act & Assert
-        var exception = Assert.Throws<InvalidOperationException>(() => proof.Verify(rootHash, hashFunction));
         Assert.Contains("null", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -454,20 +449,15 @@ public class MerkleProofTests
     [Fact]
     public void Verify_WithMultipleSiblingHashes_ValidatesEachOne()
     {
-        // Arrange - Create a proof with multiple levels where second sibling is null
-        var proof = new MerkleProof(
+        // Act & Assert - Constructor now validates and throws ArgumentException with index information
+        var exception = Assert.Throws<ArgumentException>(() => new MerkleProof(
             new byte[] { 1, 2, 3 },
             0,
             2,
             new byte[][] { new byte[] { 4, 5, 6 }, null! },
-            new bool[] { true, false });
+            new bool[] { true, false }));
 
-        var hashFunction = new Sha256HashFunction();
-        var rootHash = new byte[] { 1, 2, 3 };
-
-        // Act & Assert
-        var exception = Assert.Throws<InvalidOperationException>(() => proof.Verify(rootHash, hashFunction));
-        Assert.Contains("level 1", exception.Message); // Second level (0-indexed)
+        Assert.Contains("index 1", exception.Message); // Second sibling (0-indexed)
         Assert.Contains("null", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
