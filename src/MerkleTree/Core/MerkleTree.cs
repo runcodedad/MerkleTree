@@ -207,6 +207,7 @@ public class MerkleTree : MerkleTreeBase
         if (leafIndex < 0 || leafIndex >= LeafCount)
         {
             throw new ArgumentOutOfRangeException(nameof(leafIndex),
+                leafIndex,
                 $"Leaf index must be between 0 and {LeafCount - 1}.");
         }
 

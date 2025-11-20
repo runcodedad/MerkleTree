@@ -93,6 +93,25 @@ public class MerkleProof
         if (siblingIsRight.Length != treeHeight)
             throw new ArgumentException($"Expected {treeHeight} orientation bits, got {siblingIsRight.Length}.", nameof(siblingIsRight));
 
+        // Validate sibling hash consistency
+        int? expectedHashSize = null;
+        for (int i = 0; i < siblingHashes.Length; i++)
+        {
+            if (siblingHashes[i] == null)
+                throw new ArgumentException($"Sibling hash at index {i} is null.", nameof(siblingHashes));
+            
+            if (expectedHashSize == null)
+            {
+                expectedHashSize = siblingHashes[i].Length;
+            }
+            else if (siblingHashes[i].Length != expectedHashSize.Value)
+            {
+                throw new ArgumentException(
+                    $"Sibling hash at index {i} has inconsistent length {siblingHashes[i].Length}, expected {expectedHashSize.Value}.",
+                    nameof(siblingHashes));
+            }
+        }
+
         LeafValue = leafValue;
         LeafIndex = leafIndex;
         TreeHeight = treeHeight;
@@ -176,14 +195,19 @@ public class MerkleProof
     /// <exception cref="InvalidOperationException">Thrown when sibling hashes have inconsistent sizes.</exception>
     public byte[] Serialize()
     {
+        // Validate all sibling hashes first before accessing any properties
+        for (int i = 0; i < SiblingHashes.Length; i++)
+        {
+            if (SiblingHashes[i] == null)
+                throw new InvalidOperationException($"Sibling hash at index {i} is null.");
+        }
+
         // Determine hash size from first sibling hash, or 0 if no siblings
         int hashSize = TreeHeight > 0 ? SiblingHashes[0].Length : 0;
 
         // Validate that all sibling hashes have the same size
         for (int i = 0; i < SiblingHashes.Length; i++)
         {
-            if (SiblingHashes[i] == null)
-                throw new InvalidOperationException($"Sibling hash at index {i} is null.");
             if (SiblingHashes[i].Length != hashSize)
                 throw new InvalidOperationException($"Sibling hash at index {i} has size {SiblingHashes[i].Length}, expected {hashSize}.");
         }
