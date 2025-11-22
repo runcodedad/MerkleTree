@@ -1,0 +1,96 @@
+name: Publish to NuGet
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write  # Required for committing version updates and creating tags
+
+concurrency:
+  group: nuget-publish
+  cancel-in-progress: false  # Don't cancel in-progress publishes
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Validate branch
+      if: github.ref != 'refs/heads/main'
+      run: |
+        echo "::error::This workflow can only be run from the main branch. Current branch: ${{ github.ref }}"
+        exit 1
+    
+    - name: Validate version format
+      run: |
+        if [[ ! "${{ inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$ ]]; then
+          echo "::error::Invalid version format: ${{ inputs.version }}. Must follow semantic versioning (e.g., 1.0.0, 1.0.0-beta, 1.0.0-rc.1+build.123)"
+          exit 1
+        fi
+        echo "Version format validated: ${{ inputs.version }}"
+        
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+      
+    - name: Configure Git
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+      
+    - name: Restore dependencies
+      run: dotnet restore
+      
+    - name: Update version
+      run: |
+        sed -i "s/<Version>.*<\/Version>/<Version>${{ inputs.version }}<\/Version>/" src/MerkleTree/MerkleTree.csproj
+        
+    - name: Build
+      run: dotnet build --configuration Release --no-restore
+      
+    - name: Run tests
+      run: dotnet test --configuration Release --no-build --verbosity normal
+      
+    - name: Commit version update
+      run: |
+        git add src/MerkleTree/MerkleTree.csproj
+        if git diff --staged --quiet; then
+          echo "No version changes to commit"
+        else
+          git commit -m "chore: bump version to ${{ inputs.version }}"
+          git push
+          echo "Version ${{ inputs.version }} committed and pushed"
+        fi
+      
+    - name: Pack
+      run: dotnet pack src/MerkleTree/MerkleTree.csproj --configuration Release --no-build --output ./packages
+      
+    - name: Publish to NuGet
+      env:
+        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+      run: dotnet nuget push ./packages/*.nupkg --api-key $NUGET_API_KEY --source https://api.nuget.org/v3/index.json --skip-duplicate
+      
+    - name: Create Git tag
+      run: |
+        # Fetch remote tags to ensure we have the latest state
+        git fetch --tags
+        
+        # Check if tag exists locally or remotely
+        if git rev-parse "v${{ inputs.version }}" >/dev/null 2>&1 || git ls-remote --tags origin "refs/tags/v${{ inputs.version }}" | grep -q "v${{ inputs.version }}"; then
+          echo "Tag v${{ inputs.version }} already exists (locally or remotely), skipping tag creation"
+        else
+          git tag -a "v${{ inputs.version }}" -m "Release version ${{ inputs.version }}"
+          git push origin "v${{ inputs.version }}"
+          echo "Created and pushed tag v${{ inputs.version }}"
+        fi
